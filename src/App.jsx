@@ -666,6 +666,7 @@ function Sidebar({ active, setActive, profile, onLogout, delinqCount }) {
       { id:"auditlogs",   icon:"◉",  label:"Audit Logs" },
     ]},
   ];
+  
   const initials = (profile?.full_name||"U").split(",").map(s=>s.trim()[0]).join("").slice(0,2).toUpperCase();
   return (
     <div className="sidebar">
@@ -719,11 +720,30 @@ function Dashboard({ token }) {
           db.select("collections",{filter:`payment_date=eq.${d}&is_voided=eq.false`,select:"total_paid"},token),
           db.select("collections",{filter:`payment_date=gte.${ms}&is_voided=eq.false`,select:"total_paid"},token),
           db.select("collections",{filter:`payment_date=gte.${ys}&is_voided=eq.false`,select:"total_paid"},token),
-          db.select("delinquency",{filter:"status=eq.UNPAID",select:"property_id"},token),
-          db.select("collections",{select:"or_number,payment_date,total_paid,basic_tax,sef_tax,payment_method,taxpayers(lastname,firstname)",order:"created_at.desc",limit:8,filter:"is_voided=eq.false"},token),
+          db.select("delinquency", { filter: "status=eq.UNPAID", select: "property_id" }, token),
+          // 🌟 CHANGE 1: Increased limit to 50 so we can group them properly
+          db.select("collections",{select:"or_number,payment_date,total_paid,basic_tax,sef_tax,payment_method,taxpayers(lastname,firstname)",order:"created_at.desc",limit:50,filter:"is_voided=eq.false"},token),
         ]);
         const sum = a => a.reduce((s,c)=>s+(+c.total_paid||0),0);
-        setStats({ today:sum(tc), month:sum(mc), ytd:sum(yc), delinq: new Set(dq.map(d => d.property_id)).size, recent:rc });
+        
+        // 🌟 CHANGE 2: Group the recent collections by OR Number
+        const groupedRecent = Object.values((rc || []).reduce((acc, c) => {
+          if (!acc[c.or_number]) {
+            acc[c.or_number] = { ...c, total_paid: 0, basic_tax: 0, sef_tax: 0 };
+          }
+          acc[c.or_number].total_paid += parseFloat(c.total_paid) || 0;
+          acc[c.or_number].basic_tax += parseFloat(c.basic_tax) || 0;
+          acc[c.or_number].sef_tax += parseFloat(c.sef_tax) || 0;
+          return acc;
+        }, {})).slice(0, 8); // Keep only the top 8 unique receipts
+
+        setStats({ 
+          today: sum(tc), 
+          month: sum(mc), 
+          ytd: sum(yc), 
+          delinq: new Set((dq || []).filter(d => d.property_id).map(d => d.property_id)).size, 
+          recent: groupedRecent // 🌟 CHANGE 3: Use the grouped data!
+        });
       } catch(e) { console.error(e); }
       setLoading(false);
     })();
@@ -1417,7 +1437,6 @@ function Assessments({ token, profile }) {
     </>
   );
 }
-
 /* ═══════════════════════════════════════════════════════════
    COLLECTION
 ═══════════════════════════════════════════════════════════ */
@@ -1428,13 +1447,14 @@ function Collection({ token, profile }) {
   const [propList,setPropList] = useState([]);
   const [selProp,setSelProp] = useState(null);
   const [asmt,setAsmt]       = useState(null);
-  const [asmtHistory, setAsmtHistory] = useState([]); // ADD THIS LINE
+  const [asmtHistory, setAsmtHistory] = useState([]); 
   const [paidYears, setPaidYears] = useState([]);
   const [fromYear,setFromYear] = useState(String(new Date().getFullYear()));
   const [toYear,setToYear]     = useState(String(new Date().getFullYear()));
   const [method,setMethod]   = useState("CASH");
   const [fromQuarter, setFromQuarter] = useState("1");
   const [toQuarter, setToQuarter] = useState("4");
+  const [paidBy, setPaidBy] = useState(""); // 🌟 ENCODING STATE
   const [checkNo,setCheckNo] = useState("");
   const [posting,setPosting] = useState(false);
   const [issued,setIssued]   = useState(null);
@@ -1446,6 +1466,10 @@ function Collection({ token, profile }) {
       const d = await db.select("taxpayers",{filter:`or=(lastname.ilike.*${q}*,taxpayer_code.ilike.*${q}*)`,limit:1},token);
       if (!d.length) { setErr("Taxpayer not found. Try last name or taxpayer code."); return; }
       setFound(d[0]);
+      
+      // 🌟 MOVED INSIDE THE FUNCTION: Auto-fills the owner's name
+      setPaidBy(`${d[0].firstname} ${d[0].lastname}`); 
+      
       const ps = await db.select("properties",{filter:`taxpayer_id=eq.${d[0].id}`},token);
       setPropList(ps); setStep(2);
     } catch(e){ setErr(e.message); }
@@ -1455,30 +1479,21 @@ function Collection({ token, profile }) {
     setErr(""); 
     try {
       setSelProp(p);
-      
-      // 1. Fetch ALL historical assessments for this property
       const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
       setAsmtHistory(history || []); 
-      
-      // 2. Fetch Payment History (Only valid, non-voided collections)
       const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
-      
-      // Extract just the paid years into an array (e.g., [2021, 2022])
       const yearsPaid = payments ? payments.map(pay => parseInt(pay.tax_year)) : [];
       setPaidYears(yearsPaid);
-
       setStep(3);
     } catch(e) {
       setErr("Failed to load property: " + e.message);
     }
   };
 
-
 // --- MULTI-YEAR & QUARTER-SPLIT COMPUTATION ---
 const currentYear = new Date().getFullYear();
-const currentMonth = new Date().getMonth() + 1; // 1 to 12
+const currentMonth = new Date().getMonth() + 1;
 
-// Safely parse the years, default to current year if blank/invalid
 let start = parseInt(fromYear) || currentYear;
 let end = parseInt(toYear) || currentYear;
 if (start > end) { let temp = start; start = end; end = temp; }
@@ -1498,12 +1513,9 @@ for (let y = start; y <= end; y++) {
   const sefTax   = activeAsmt ? parseFloat(activeAsmt.sef_tax)   : (selProp ? parseFloat(selProp.assessed_value) * 0.01 : 0);
   
   let rowBasic = 0, rowSef = 0, rowPen = 0, rowDisc = 0;
-
-  // Determine starting and ending quarters for this specific year in the loop
   let startQ = (y === start) ? parseInt(fromQuarter) : 1;
   let endQ = (y === end) ? parseInt(toQuarter) : 4;
   
-  // Safety check: if paying only 1 year, and cashier accidentally puts Q4 to Q1, flip it for them
   if (y === start && y === end && startQ > endQ) { let temp = startQ; startQ = endQ; endQ = temp; }
 
   const qCount = (endQ - startQ) + 1;
@@ -1516,29 +1528,22 @@ for (let y = start; y <= end; y++) {
   for (let q = startQ; q <= endQ; q++) quartersToPay.push(q);
 
   if (y > currentYear) {
-    // ADVANCE PAYMENT (15% discount)
     rowDisc = (rowBasic + rowSef) * 0.15; 
-    
   } else if (y < currentYear) {
-    // DELINQUENT PAST YEARS (Penalty counts from Jan 1 of that year, capped at 72%)
     const mosLate = ((currentYear - y) * 12) + currentMonth;
     rowPen = (rowBasic + rowSef) * Math.min(mosLate * 0.02, 0.72);
-    
   } else {
-    // CURRENT YEAR (Evaluate each quarter being paid to see if it is prompt or late)
     quartersToPay.forEach(q => {
-      const dueMo = q * 3; // Q1=3, Q2=6, Q3=9, Q4=12
+      const dueMo = q * 3;
       if (currentMonth <= dueMo) {
-        rowDisc += qBaseDue * 0.10; // Prompt Discount
+        rowDisc += qBaseDue * 0.10;
       } else {
-        rowPen += qBaseDue * Math.min(currentMonth * 0.02, 0.72); // Late Penalty
+        rowPen += qBaseDue * Math.min(currentMonth * 0.02, 0.72);
       }
     });
   }
 
   const rowTot = rowBasic + rowSef - rowDisc + rowPen;
-  
-  // Create a clean label for the UI and the Database (e.g., "Q1-Q3" or "FULL")
   const qLabel = qCount === 4 ? "FULL" : (startQ === endQ ? `Q${startQ}` : `Q${startQ}-Q${endQ}`);
   const displayLabel = qCount === 4 ? y : `${y} (${qLabel})`;
 
@@ -1546,20 +1551,17 @@ for (let y = start; y <= end; y++) {
     year: y, display: displayLabel, quarterTag: qLabel, 
     isPaid: false, basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot 
   });
-  
   tBasic += rowBasic; tSef += rowSef; tPen += rowPen; tDisc += rowDisc; gTotal += rowTot;
 }
-
 
 const post = async () => {
   setPosting(true); setErr("");
   try {
     const currentYear = new Date().getFullYear();
-    const baseNum = parseInt(String(Date.now()).slice(-5));
+    const singleOrNumber = `OR-${currentYear}-${String(Date.now()).slice(-5)}`;
     
-    // Map the cart into an array of database rows
-    const rowsToInsert = cart.map((item, index) => ({
-      or_number: `OR-${currentYear}-${baseNum + index}`, 
+    const rowsToInsert = cart.map((item) => ({
+      or_number: singleOrNumber, 
       taxpayer_id: found.id, property_id: selProp?.id,
       assessment_id: asmt?.id, tax_year: item.year,
       payment_date: today(), payment_method: method, 
@@ -1567,36 +1569,26 @@ const post = async () => {
       basic_tax: item.basic, sef_tax: item.sef, idle_tax: 0,
       penalty: item.pen, discount: item.disc, total_paid: item.total,
       cashier_id: profile?.id, check_no: checkNo || null,
+      paid_by: paidBy.toUpperCase(), // 🌟 ADDED PAID BY SAVING
     }));
 
-    // 1. Insert all collections at once
     const insertedRows = await db.insert("collections", rowsToInsert, token);
     const col = insertedRows[0]; 
-    const mainOr = col.or_number;
+    const mainOr = singleOrNumber; 
     
-    // 2. Issue Official Receipt
     await db.insert("official_receipts",{or_number:mainOr, collection_id:col.id, printed_by:profile?.id, print_count:0},token);
     await logAudit(token,profile?.id,profile?.full_name,`${mainOr} — ${fmt(gTotal)} — ${found.lastname}`,"COLLECTION");
     
-    // 3. NEW: AUTOMATICALLY CLEAR DELINQUENCIES!
-    // We loop through the cart. If the year wasn't already paid previously, we update the delinquency ledger.
     for (const item of cart) {
       if (!item.isPaid) {
         try {
-          await db.update(
-            "delinquency", 
-            { status: "PAID" }, // Change status to PAID
-            { filter: `property_id=eq.${selProp.id}&tax_year=eq.${item.year}` }, 
-            token
-          );
-        } catch (updateErr) {
-          console.warn(`Could not update delinquency for ${item.year}:`, updateErr);
-        }
+          await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${selProp.id}&tax_year=eq.${item.year}` }, token);
+        } catch (updateErr) {}
       }
     }
     
-    const displayOr = isSingle ? mainOr : `${mainOr} to OR-${currentYear}-${baseNum + cart.length - 1}`;
-    setIssued({...col, or_number: displayOr, tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, property:selProp, cashier:profile?.full_name});
+    // 🌟 ADDED PAID BY TO RECEIPT ISSUANCE
+    setIssued({...col, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, property:selProp, cashier:profile?.full_name});
     setStep(4);
   } catch(e){ setErr(e.message); }
   setPosting(false);
@@ -1620,7 +1612,8 @@ const post = async () => {
               </div>
               <div className="or-number">OFFICIAL RECEIPT NO. {issued.or_number}</div>
               <div className="or-divider"/>
-              {[["Date:",today()],["Taxpayer:",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Address:",issued.taxpayer.address||"—"],["TD Number:",issued.property?.td_number||"—"],["Tax Year:",issued.tax_year],["Payment:",issued.payment_method]].map(([k,v])=>(
+              {/* 🌟 ADDED PAID BY TO THE PRINTED RECEIPT */}
+              {[["Date:",today()],["Taxpayer:",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By:", issued.paid_by],["Address:",issued.taxpayer.address||"—"],["TD Number:",issued.property?.td_number||"—"],["Tax Year:",issued.tax_year],["Payment:",issued.payment_method]].map(([k,v])=>(
                 <div className="or-line" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
               ))}
               <div className="or-breakdown" style={{ marginTop: "16px", marginBottom: "16px", borderTop: "1px dashed #ccc", borderBottom: "1px dashed #ccc", padding: "12px 0" }}>
@@ -1661,7 +1654,7 @@ const post = async () => {
           <div className="panel">
             <div className="panel-title">Transaction Summary</div>
             <div className="detail-grid">
-              {[["OR Number",issued.or_number],["Taxpayer",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["TD No.",issued.property?.td_number||"—"],["Tax Year",issued.tax_year],["Quarter",issued.quarter],["Basic RPT",fmt(issued.basic_tax)],["SEF",fmt(issued.sef_tax)],["Total",fmt(issued.total_paid)],["Method",issued.payment_method],["Cashier",issued.cashier||"—"]].map(([k,v])=>(
+              {[["OR Number",issued.or_number],["Taxpayer",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By", issued.paid_by],["TD No.",issued.property?.td_number||"—"],["Tax Year",issued.tax_year],["Quarter",issued.quarter],["Basic RPT",fmt(issued.basic_tax)],["SEF",fmt(issued.sef_tax)],["Total",fmt(issued.total_paid)],["Method",issued.payment_method],["Cashier",issued.cashier||"—"]].map(([k,v])=>(
                 <div className="drow" key={k}><span className="dk">{k}</span><span className="dv">{v}</span></div>
               ))}
             </div>
@@ -1746,9 +1739,7 @@ const post = async () => {
                 <div className="form-group">
                     <label className="form-label">From</label>
                     <div style={{display: "flex", gap: "8px"}}>
-                      {/* Fixed width of 80px and reduced padding for the year */}
                       <input type="number" value={fromYear} onChange={(e) => setFromYear(e.target.value)} min="1950" max={new Date().getFullYear() + 5} style={{width: "80px", padding: "10px 8px", textAlign: "center"}} />
-                      {/* flex: 1 makes the select take up the remaining space */}
                       <select value={fromQuarter} onChange={e=>setFromQuarter(e.target.value)} style={{flex: 1}}>
                         <option value="1">Q1 (Jan-Mar)</option>
                         <option value="2">Q2 (Apr-Jun)</option>
@@ -1782,6 +1773,17 @@ const post = async () => {
                       <input value={checkNo} onChange={e=>setCheckNo(e.target.value)}/>
                     </div>
                   )}
+
+                  {/* 🌟 ADDED THE ENCODING BOX HERE IN THE UI */}
+                  <div className="form-group span2" style={{marginTop: "8px"}}>
+                    <label className="form-label">Paid By (Actual person paying)</label>
+                    <input 
+                      value={paidBy} 
+                      onChange={e => setPaidBy(e.target.value)} 
+                      placeholder="e.g. Maria Santos (Sister) or Juan Dela Cruz (Son)"
+                    />
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -1797,13 +1799,11 @@ const post = async () => {
                         <tr key={c.year} style={c.isPaid ? { backgroundColor: "var(--bg2)", opacity: 0.7 } : {}}>
                         <td><span className="chip">{c.display}</span></td>
                           
-                          {/* If the year is paid, merge the columns and show a green badge */}
                           {c.isPaid ? (
                             <td colSpan="4" style={{ textAlign: "center", fontSize: "12px", color: "var(--green2)", fontWeight: 700, letterSpacing: "1px" }}>
                               ALREADY PAID
                             </td>
                           ) : (
-                            /* If not paid, show the normal math */
                             <>
                               <td>{fmt(c.basic)}</td>
                               <td>{fmt(c.sef)}</td>
@@ -1840,7 +1840,6 @@ const post = async () => {
     </>
   );
 }
-
 /* ═══════════════════════════════════════════════════════════
    DELINQUENCY
 ═══════════════════════════════════════════════════════════ */
@@ -2125,7 +2124,8 @@ const viewSavedSOA = (group) => {
 
       <div className="stat-row" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
         {[
-          { label:"Delinquent Accounts", value:list.length, color:"red",   icon:"⚠️", isCur:false },
+          // 🌟 CHANGED list.length TO groupedList.length HERE:
+          { label:"Delinquent Accounts", value:groupedList.length, color:"red",   icon:"⚠️", isCur:false },
           { label:"Total Penalties",     value:totals.int,  color:"gold",  icon:"📊", isCur:true },
           { label:"Total Amount Due",    value:totals.due,  color:"blue",  icon:"💸", isCur:true },
         ].map(s=>(
@@ -2364,6 +2364,24 @@ function Receipts({ token, profile }) {
     }
     setDeleting(false);
   };
+  // Add this right before the 'return' statement in your Receipts component
+  const groupedList = Object.values(list.reduce((acc, c) => {
+    if (!acc[c.or_number]) {
+      acc[c.or_number] = { 
+        ...c, 
+        sum_total: 0, sum_basic: 0, sum_sef: 0, 
+        minYear: parseInt(c.tax_year), maxYear: parseInt(c.tax_year),
+        rowIds: []
+      };
+    }
+    acc[c.or_number].sum_total += parseFloat(c.total_paid) || 0;
+    acc[c.or_number].sum_basic += parseFloat(c.basic_tax) || 0;
+    acc[c.or_number].sum_sef += parseFloat(c.sef_tax) || 0;
+    acc[c.or_number].minYear = Math.min(acc[c.or_number].minYear, parseInt(c.tax_year));
+    acc[c.or_number].maxYear = Math.max(acc[c.or_number].maxYear, parseInt(c.tax_year));
+    acc[c.or_number].rowIds.push(c.id);
+    return acc;
+  }, {}));
 
   return (
     <>
@@ -2378,25 +2396,31 @@ function Receipts({ token, profile }) {
               : <div className="table-wrap"><table>
                   <thead><tr><th>OR Number</th><th>Date</th><th>Taxpayer</th><th>Year</th><th>Basic</th><th>SEF</th><th>Total</th><th>Method</th><th>Status</th><th></th></tr></thead>
                   <tbody>
-                    {list.map((c,i)=>(
+                    {groupedList.map((c,i)=>(
                       <tr key={i}>
                         <td><span className="badge badge-blue">{c.or_number}</span></td>
                         <td><span className="mono-sm">{c.payment_date}</span></td>
                         <td style={{fontWeight:600,fontSize:13}}>{c.taxpayers?`${c.taxpayers.lastname}, ${c.taxpayers.firstname}`:"—"}</td>
-                        <td><span className="chip">{c.tax_year}</span></td>
-                        <td><span className="mono">{fmt(c.basic_tax)}</span></td>
-                        <td><span className="mono">{fmt(c.sef_tax)}</span></td>
-                        <td><span className="mono" style={{color:"var(--green2)",fontWeight:700}}>{fmt(c.total_paid)}</span></td>
+                        
+                        {/* Show grouped years, e.g., 2021-2026 */}
+                        <td><span className="chip">{c.minYear === c.maxYear ? c.minYear : `${c.minYear}-${c.maxYear}`}</span></td>
+                        
+                        {/* Show the combined totals for the whole receipt */}
+                        <td><span className="mono">{fmt(c.sum_basic)}</span></td>
+                        <td><span className="mono">{fmt(c.sum_sef)}</span></td>
+                        <td><span className="mono" style={{color:"var(--green2)",fontWeight:700}}>{fmt(c.sum_total)}</span></td>
+                        
                         <td><span className="chip">{c.payment_method}</span></td>
                         <td><span className={`badge ${c.is_voided?"badge-red":"badge-green"}`}>{c.is_voided?"VOIDED":"VALID"}</span></td>
                         <td>
                           {["admin", "treasurer"].includes(profile?.role) && (
+                            // Make sure delete uses the first ID, or handle bulk delete
                             <button className="btn btn-ghost btn-xs" style={{color: "var(--red2)"}} onClick={() => handleDelete(c)} disabled={deleting}>✕</button>
                           )}
                         </td>
                       </tr>
                     ))}
-                  </tbody>
+                  </tbody>                
                 </table></div>
           }
           <div className="pagination">
@@ -2647,8 +2671,9 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    db.select("delinquency",{filter:"status=eq.UNPAID",select:"id"},session.token)
-      .then(d=>setDC(d.length)).catch(()=>{});
+    db.select("delinquency",{filter:"status=eq.UNPAID",select:"property_id"},session.token)
+      .then(d => setDC(new Set(d.filter(x => x.property_id).map(x => x.property_id)).size))
+      .catch(()=>{});
   },[session,page]);
 
   if (!session) return <><style>{G}</style><Login onLogin={setSession}/></>;
