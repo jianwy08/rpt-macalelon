@@ -719,11 +719,11 @@ function Dashboard({ token }) {
           db.select("collections",{filter:`payment_date=eq.${d}&is_voided=eq.false`,select:"total_paid"},token),
           db.select("collections",{filter:`payment_date=gte.${ms}&is_voided=eq.false`,select:"total_paid"},token),
           db.select("collections",{filter:`payment_date=gte.${ys}&is_voided=eq.false`,select:"total_paid"},token),
-          db.select("delinquency",{filter:"status=eq.UNPAID",select:"id"},token),
+          db.select("delinquency",{filter:"status=eq.UNPAID",select:"property_id"},token),
           db.select("collections",{select:"or_number,payment_date,total_paid,basic_tax,sef_tax,payment_method,taxpayers(lastname,firstname)",order:"created_at.desc",limit:8,filter:"is_voided=eq.false"},token),
         ]);
         const sum = a => a.reduce((s,c)=>s+(+c.total_paid||0),0);
-        setStats({ today:sum(tc), month:sum(mc), ytd:sum(yc), delinq:dq.length, recent:rc });
+        setStats({ today:sum(tc), month:sum(mc), ytd:sum(yc), delinq: new Set(dq.map(d => d.property_id)).size, recent:rc });
       } catch(e) { console.error(e); }
       setLoading(false);
     })();
@@ -2427,7 +2427,7 @@ function Reports({ token, profile }) {
     try {
       if (tab==="delinq") {
         // Added 'id'
-        const d = await db.select("delinquency",{filter:"status=eq.UNPAID",select:"id,*,properties(td_number),taxpayers(lastname,firstname)",order:"months_delinquent.desc"},token);
+        const d = await db.select("delinquency",{filter:"status=eq.UNPAID",select:"property_id,*,properties(td_number),taxpayers(lastname,firstname)",order:"months_delinquent.desc"},token);
         setData(d); setLoading(false); return;
       }
       const filter = tab==="daily"
