@@ -3157,39 +3157,58 @@ function Delinquency({ token, profile }) {
           <>
             <style>{`
               @media print {
-                @page { size: A4 portrait; margin: 15mm; }
+                /* 🌟 Reduce margin to give the 11-column table more breathing room */
+                @page { size: A4 portrait; margin: 10mm; }
                 
-                /* 🌟 THE FIX: Force all wrappers out of 'fixed' screen mode */
                 html, body, #root, .modal-backdrop { 
                   height: auto !important; 
                   overflow: visible !important; 
                   position: static !important; 
                   display: block !important; 
+                  padding: 0 !important; 
+                  margin: 0 !important;
                 }
                 
                 body * { visibility: hidden !important; }
                 .mass-soa-print-area, .mass-soa-print-area * { visibility: visible !important; color: #000 !important; }
                 
-                /* 🌟 Change position to static so it flows naturally to next pages */
                 .mass-soa-print-area { 
                   position: static !important; 
                   width: 100% !important; 
-                  background: #fff !important; 
+                  max-width: 100% !important; /* Overrides the 850px */
+                  background: none !important; 
                   box-shadow: none !important; 
                   border: none !important; 
-                  margin: 0 !important; 
+                  margin: 0 auto !important; 
                   padding: 0 !important; 
-                  max-height: none !important; 
                   overflow: visible !important; 
+                }
+
+                /* 🌟 KILL THE 50px INLINE PADDING FOR PRINTING */
+                .mass-soa-print-area > div {
+                  padding: 10px 0 !important; 
+                  border: none !important;
+                  box-sizing: border-box !important;
                 }
                 
                 .no-print { display: none !important; }
-                /* 🌟 Added break-after: page for stronger browser support */
                 .page-break { page-break-after: always !important; break-after: page !important; }
-                table { page-break-inside: auto; width: 100% !important; margin: 0 auto; }
+                
+                /* 🌟 MAKE TABLE FIT A4 PERFECTLY */
+                table { 
+                  page-break-inside: auto; 
+                  width: 100% !important; 
+                  margin: 0 auto; 
+                  table-layout: auto !important;
+                }
                 tr { page-break-inside: avoid; page-break-after: auto; }
                 thead { display: table-header-group; }
-                .mass-soa-print-area th, .mass-soa-print-area td { font-size: 10pt !important; padding: 4px !important; }
+                
+                /* 🌟 Shrink fonts slightly so all columns fit without getting cut off */
+                .mass-soa-print-area th, .mass-soa-print-area td { 
+                  font-size: 8pt !important; 
+                  padding: 3px !important; 
+                }
               }
             `}</style>
             <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
