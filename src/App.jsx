@@ -3157,57 +3157,61 @@ function Delinquency({ token, profile }) {
           <>
             <style>{`
               @media print {
-                /* 🌟 Reduce margin to give the 11-column table more breathing room */
                 @page { size: A4 portrait; margin: 10mm; }
                 
+                /* 1. KILL FLEXBOX AND FORCE TOP-LEFT ALIGNMENT */
                 html, body, #root, .modal-backdrop { 
                   height: auto !important; 
+                  width: 100% !important;
                   overflow: visible !important; 
-                  position: static !important; 
-                  display: block !important; 
+                  position: absolute !important; 
+                  left: 0 !important;
+                  top: 0 !important;
+                  display: block !important; /* Destroys flex centering */
                   padding: 0 !important; 
                   margin: 0 !important;
+                  background: #fff !important;
                 }
                 
                 body * { visibility: hidden !important; }
                 .mass-soa-print-area, .mass-soa-print-area * { visibility: visible !important; color: #000 !important; }
                 
+                /* 2. FORCE CONTAINER TO MATCH EXACT PAPER WIDTH */
                 .mass-soa-print-area { 
-                  position: static !important; 
+                  position: absolute !important; 
+                  left: 0 !important;
+                  top: 0 !important;
                   width: 100% !important; 
-                  max-width: 100% !important; /* Overrides the 850px */
-                  background: none !important; 
+                  max-width: 100% !important; 
+                  background: #fff !important; 
                   box-shadow: none !important; 
                   border: none !important; 
-                  margin: 0 auto !important; 
+                  margin: 0 !important; 
                   padding: 0 !important; 
-                  overflow: visible !important; 
                 }
 
-                /* 🌟 KILL THE 50px INLINE PADDING FOR PRINTING */
+                /* 3. STRIP INLINE PADDING THAT PUSHES CONTENT OFF-SCREEN */
                 .mass-soa-print-area > div {
                   padding: 10px 0 !important; 
-                  border: none !important;
+                  width: 100% !important;
                   box-sizing: border-box !important;
                 }
                 
                 .no-print { display: none !important; }
                 .page-break { page-break-after: always !important; break-after: page !important; }
                 
-                /* 🌟 MAKE TABLE FIT A4 PERFECTLY */
+                /* 4. SQUEEZE THE 11-COLUMN TABLE TO FIT */
                 table { 
-                  page-break-inside: auto; 
                   width: 100% !important; 
-                  margin: 0 auto; 
+                  max-width: 100% !important;
                   table-layout: auto !important;
                 }
                 tr { page-break-inside: avoid; page-break-after: auto; }
                 thead { display: table-header-group; }
                 
-                /* 🌟 Shrink fonts slightly so all columns fit without getting cut off */
                 .mass-soa-print-area th, .mass-soa-print-area td { 
-                  font-size: 8pt !important; 
-                  padding: 3px !important; 
+                  font-size: 7.5pt !important; 
+                  padding: 2px !important; 
                 }
               }
             `}</style>
