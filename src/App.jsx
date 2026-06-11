@@ -3158,11 +3158,34 @@ function Delinquency({ token, profile }) {
             <style>{`
               @media print {
                 @page { size: A4 portrait; margin: 15mm; }
+                
+                /* 🌟 THE FIX: Force all wrappers out of 'fixed' screen mode */
+                html, body, #root, .modal-backdrop { 
+                  height: auto !important; 
+                  overflow: visible !important; 
+                  position: static !important; 
+                  display: block !important; 
+                }
+                
                 body * { visibility: hidden !important; }
                 .mass-soa-print-area, .mass-soa-print-area * { visibility: visible !important; color: #000 !important; }
-                .mass-soa-print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; max-height: none !important; overflow: visible !important; }
+                
+                /* 🌟 Change position to static so it flows naturally to next pages */
+                .mass-soa-print-area { 
+                  position: static !important; 
+                  width: 100% !important; 
+                  background: #fff !important; 
+                  box-shadow: none !important; 
+                  border: none !important; 
+                  margin: 0 !important; 
+                  padding: 0 !important; 
+                  max-height: none !important; 
+                  overflow: visible !important; 
+                }
+                
                 .no-print { display: none !important; }
-                .page-break { page-break-after: always !important; }
+                /* 🌟 Added break-after: page for stronger browser support */
+                .page-break { page-break-after: always !important; break-after: page !important; }
                 table { page-break-inside: auto; width: 100% !important; margin: 0 auto; }
                 tr { page-break-inside: avoid; page-break-after: auto; }
                 thead { display: table-header-group; }
