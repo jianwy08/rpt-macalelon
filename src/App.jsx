@@ -3157,32 +3157,30 @@ function Delinquency({ token, profile }) {
           <>
             <style>{`
               @media print {
-                @page { size: A4 portrait; margin: 10mm; }
+                @page { size: A4 portrait; margin: 15mm; }
                 
-                /* 1. RESET MASTER FLOW (Allows pagination to work) */
+                /* 1. RESET THE MAIN WINDOW */
                 html, body, #root { 
-                  display: block !important; 
-                  position: static !important; 
                   height: auto !important; 
-                  width: auto !important;
+                  width: 100% !important;
                   overflow: visible !important; 
-                  background: #fff !important;
+                  display: block !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
                 }
                 
                 body * { visibility: hidden !important; }
                 
-                /* 2. SNAP BACKDROP TO TOP LEFT, KILL FLEXBOX */
+                /* 2. FREE THE MODAL BACKDROP (Kill flexbox centering) */
                 .modal-backdrop {
-                  visibility: visible !important;
-                  display: block !important; /* Destroys flex centering */
-                  position: absolute !important; /* Snaps to top left of paper */
+                  position: absolute !important;
                   top: 0 !important; 
                   left: 0 !important;
                   width: 100% !important;
                   height: auto !important;
+                  display: block !important; 
+                  background: none !important;
                   padding: 0 !important;
-                  margin: 0 !important;
-                  background: #fff !important;
                 }
 
                 .mass-soa-print-area, .mass-soa-print-area * { 
@@ -3190,12 +3188,15 @@ function Delinquency({ token, profile }) {
                   color: #000 !important; 
                 }
                 
-                /* 3. MUST BE STATIC FOR PAGE BREAKS TO WORK */
+                /* 3. THE MAGIC FIX: KILL THE SCROLLBAR AND MAX-HEIGHT */
                 .mass-soa-print-area { 
-                  display: block !important;
-                  position: static !important; 
+                  position: absolute !important; 
+                  top: 0 !important; 
+                  left: 0 !important;
                   width: 100% !important; 
-                  max-width: 100% !important; 
+                  max-height: none !important; /* Overrides your 90vh */
+                  overflow: visible !important; /* Overrides your scrollbar */
+                  display: block !important;
                   background: #fff !important; 
                   border: none !important; 
                   box-shadow: none !important;
@@ -3203,42 +3204,29 @@ function Delinquency({ token, profile }) {
                   padding: 0 !important; 
                 }
 
-                /* 4. FORCE EVERY SOA ONTO ITS OWN PAGE & REMOVE PADDING */
-                .mass-soa-print-area > div:not(.no-print) {
-                  display: block !important;
-                  position: static !important; /* Required for page break */
-                  width: 100% !important;
-                  box-sizing: border-box !important;
-                  padding: 0 !important; /* Kills the 40px 50px pushing it off-screen */
-                  margin: 0 0 20px 0 !important;
-                  
-                  /* 🌟 This is what forces the individual pages! */
+                /* 4. FORCE THE PAGE BREAK (and hide the dashed line on paper) */
+                .page-break { 
                   page-break-after: always !important; 
                   break-after: page !important; 
-                }
-                
-                /* Don't create a blank page at the very end */
-                .mass-soa-print-area > div:last-child {
-                  page-break-after: auto !important;
-                  break-after: auto !important;
+                  display: block !important;
+                  border-bottom: none !important; /* Prevents dashed line from printing */
+                  margin-bottom: 0 !important;
                 }
 
                 .no-print { display: none !important; }
                 
-                /* 5. SQUEEZE THE 11-COLUMN TABLE TO FIT A4 */
+                /* 5. MAKE THE TABLE FIT */
                 table { 
                   width: 100% !important; 
-                  max-width: 100% !important;
                   table-layout: auto !important;
                   border-collapse: collapse !important;
-                  margin-top: 20px !important;
                 }
                 tr { page-break-inside: avoid; page-break-after: auto; }
                 thead { display: table-header-group; }
                 
                 .mass-soa-print-area th, .mass-soa-print-area td { 
                   font-size: 8pt !important; 
-                  padding: 3px !important; 
+                  padding: 4px !important; 
                 }
               }
             `}</style>
