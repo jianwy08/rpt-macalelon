@@ -67,18 +67,31 @@ function Kiosk({ db, token, onExit }) {
       const av = basic / 0.01; 
       tAv += av;
       
-      let penaltyRate = 0;
-      if (y < currentYear) {
-          const mosLate = ((currentYear - y) * 12) + targetMonth;
-          penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
-      } else if (y === currentYear) {
-          penaltyRate = "VARIES";
-      } else {
-          penaltyRate = 0;
-      }
-      
+     // 1. Calculate the actual discount money amount
       let calcDiscount = rd((basic + sef + penalty) - total);
       if (calcDiscount < 0.01) calcDiscount = 0; 
+
+      // 2. Apply your date-strict 15% Advance rule
+      let penaltyRate = 0;
+      if (y < currentYear) {
+          // LATE PENALTY (Past Years)
+          const mosLate = ((currentYear - y) * 12) + targetMonth;
+          penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
+          
+      } else if (y === currentYear) {
+          // PROMPT PAYMENT (Current Year)
+          penaltyRate = "10% DISC";
+          
+      } else if (y > currentYear) {
+          // ADVANCE PAYMENT (Future Years)
+          // 🌟 Must be paid on or before September (Months 1-9) to get 15%
+          if (targetMonth <= 9) {
+              penaltyRate = "15% DISC";
+          } else {
+              // Paid in Oct, Nov, or Dec
+              penaltyRate = "10% DISC"; 
+          }
+      }
       
       return { year: y, av: av, penalty_percent: penaltyRate, basic: basic, sef: sef, penalty: penalty, discount: calcDiscount, total: total };
     });
