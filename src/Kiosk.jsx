@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 /* ═══════════════════════════════════════════════════════════
-   TAXPAYER SELF-SERVICE KIOSK (FULL NAME & OR SEARCH)
+   TAXPAYER SELF-SERVICE KIOSK (CLEAN SOA LAYOUT)
 ═══════════════════════════════════════════════════════════ */
 function Kiosk({ db, token, onExit }) {
   const [searchMode, setSearchMode] = useState("SOA"); 
@@ -10,7 +10,7 @@ function Kiosk({ db, token, onExit }) {
   const [error, setError] = useState("");
   
   const [multiProps, setMultiProps] = useState(null); 
-  const [multiOrs, setMultiOrs] = useState(null); // 🌟 Added state for multiple receipts
+  const [multiOrs, setMultiOrs] = useState(null); 
   const [result, setResult] = useState(null); 
   const [timeLeft, setTimeLeft] = useState(60); 
   
@@ -34,7 +34,6 @@ function Kiosk({ db, token, onExit }) {
   
   const resetTimer = () => { setTimeLeft(60); };
 
-  // Watch all states for the idle timer
   useEffect(() => {
     if (result || multiProps || multiOrs) {
       timerRef.current = setInterval(() => {
@@ -54,7 +53,6 @@ function Kiosk({ db, token, onExit }) {
     return () => activityEvents.forEach(e => window.removeEventListener(e, handleActivity));
   }, [result, multiProps, multiOrs]);
 
-  // 🌟 FORMAT SOA
   const formatSOARows = (details, targetMonth) => {
     const currentYear = new Date().getFullYear();
     const sortedDetails = details.sort((a, b) => parseInt(a.tax_year) - parseInt(b.tax_year));
@@ -149,7 +147,6 @@ function Kiosk({ db, token, onExit }) {
     setLoading(false);
   };
 
-  // 🌟 FETCH SINGLE OR RESULT
   const fetchOR = (groupedData) => {
     setResult({
       type: "OR",
@@ -165,7 +162,6 @@ function Kiosk({ db, token, onExit }) {
     setMultiOrs(null);
   };
 
-  // 🌟 DUAL SEARCH
   const handleSearch = async () => {
     if (!q.trim()) return;
     setLoading(true); setError(""); setMultiProps(null); setMultiOrs(null); setResult(null);
@@ -174,10 +170,7 @@ function Kiosk({ db, token, onExit }) {
       const cleanQ = q.trim();
 
       if (searchMode === "SOA") {
-        const tps = await db.select("taxpayers", { 
-          filter: `or=(lastname.ilike.*${cleanQ}*,firstname.ilike.*${cleanQ}*)`, 
-          select: "id" 
-        }, token);
+        const tps = await db.select("taxpayers", { filter: `or=(lastname.ilike.*${cleanQ}*,firstname.ilike.*${cleanQ}*)`, select: "id" }, token);
         const tpIds = tps ? tps.map(t => t.id) : [];
 
         let filterStr = `or=(property_index_no.ilike.*${cleanQ}*,td_number.ilike.*${cleanQ}*`;
@@ -200,37 +193,25 @@ function Kiosk({ db, token, onExit }) {
         await fetchSOA(props[0]);
 
       } else {
-        // 🌟 NEW: SEARCH RECEIPTS BY NAME OR OR NUMBER
-        const tps = await db.select("taxpayers", { 
-          filter: `or=(lastname.ilike.*${cleanQ}*,firstname.ilike.*${cleanQ}*)`, 
-          select: "id" 
-        }, token);
+        const tps = await db.select("taxpayers", { filter: `or=(lastname.ilike.*${cleanQ}*,firstname.ilike.*${cleanQ}*)`, select: "id" }, token);
         const tpIds = tps ? tps.map(t => t.id) : [];
 
         let filterStr = `or=(or_number.ilike.*${cleanQ}*,paid_by.ilike.*${cleanQ}*`;
         if (tpIds.length > 0) filterStr += `,taxpayer_id.in.(${tpIds.join(',')})`;
         filterStr += `)`;
 
-        const collections = await db.select("collections", { 
-          filter: filterStr, 
-          select: "*, taxpayers(firstname, lastname)" 
-        }, token);
+        const collections = await db.select("collections", { filter: filterStr, select: "*, taxpayers(firstname, lastname)" }, token);
 
         if (!collections || collections.length === 0) {
           setError("Official Receipt or Payor not found in the system.");
           setLoading(false); return;
         }
 
-        // Group the rows into unique ORs
         const groupedORs = Object.values(collections.reduce((acc, c) => {
           if (!acc[c.or_number]) {
             acc[c.or_number] = {
-              or_number: c.or_number,
-              payment_date: c.payment_date,
-              taxpayer: c.taxpayers,
-              paid_by: c.paid_by,
-              sum_total: 0, sum_basic: 0, sum_sef: 0, sum_penalty: 0,
-              minYear: 9999, maxYear: 0
+              or_number: c.or_number, payment_date: c.payment_date, taxpayer: c.taxpayers, paid_by: c.paid_by,
+              sum_total: 0, sum_basic: 0, sum_sef: 0, sum_penalty: 0, minYear: 9999, maxYear: 0
             };
           }
           acc[c.or_number].sum_total += parseFloat(c.total_paid) || 0;
@@ -270,7 +251,6 @@ function Kiosk({ db, token, onExit }) {
         .k-btn:active:not(:disabled) { transform: translateY(0); }
         .k-btn:disabled { opacity: 0.7; cursor: not-allowed; }
         .k-btn-outline { background: transparent; border: 2px solid #2563eb; color: #2563eb; }
-        
         .prop-list-btn:hover { background: #eff6ff; border-color: #3b82f6; }
 
         @media print {
@@ -337,7 +317,6 @@ function Kiosk({ db, token, onExit }) {
           </div>
         )}
 
-        {/* 🌟 MULTIPLE PROPERTIES FOUND */}
         {!result && multiProps && (
           <div className="k-box">
              <div className="no-print" style={{ background: "#e0e7ff", padding: "8px", color: "#1e40af", fontWeight: "bold", borderRadius: "8px", marginBottom: "20px" }}>
@@ -364,7 +343,6 @@ function Kiosk({ db, token, onExit }) {
           </div>
         )}
 
-        {/* 🌟 MULTIPLE RECEIPTS FOUND */}
         {!result && multiOrs && (
           <div className="k-box">
              <div className="no-print" style={{ background: "#e0e7ff", padding: "8px", color: "#1e40af", fontWeight: "bold", borderRadius: "8px", marginBottom: "20px" }}>
@@ -405,12 +383,12 @@ function Kiosk({ db, token, onExit }) {
                   <div style={{ fontSize: "11pt" }}>Republic of the Philippines</div>
                   <div style={{ fontSize: "11pt" }}>Province of Quezon</div>
                   <div style={{ fontSize: "11pt", fontWeight: "bold" }}>MUNICIPALITY OF MACALELON</div>
-                  <div style={{ fontSize: "11pt", fontWeight: "bold", marginTop: "10px" }}>OFFICE OF THE MUNICIPAL TREASURER</div>
+                  <div style={{ fontSize: "11pt", fontWeight: "bold", marginTop: "10px" }}>STATEMENT OF ACCOUNT</div>
                 </div>
                 <div style={{ width: "80px" }}></div>
               </div>
 
-              {/* SOA RESULT */}
+              {/* CLEAN SOA RESULT */}
               {result.type === "SOA" && (
                 <>
                   {result.data.delinquencies.length === 0 ? (
@@ -429,11 +407,6 @@ function Kiosk({ db, token, onExit }) {
                           {result.data.taxpayer?.address || result.data.taxpayer?.barangay || "—"}
                         </div><br/>
                         <div style={{ borderBottom: "1px solid #000", display: "inline-block", minWidth: "350px" }}>MACALELON, QUEZON</div>
-                      </div>
-
-                      <div style={{ textAlign: "left", fontSize: "10pt", marginBottom: "15px", color: "#000" }}>Sir/Madam:</div>
-                      <div style={{ textIndent: "40px", fontSize: "10pt", textAlign: "justify", marginBottom: "15px", color: "#000" }}>
-                        This is to inform you that our records show that the Real Estate tax due on the Property/ies registered in your name listed remain unpaid as of follows;
                       </div>
 
                       <table style={{ width: "100%", margin: "0 auto", borderCollapse: "collapse", border: "2px solid #000", fontSize: "10pt", textAlign: "center", marginBottom: "10px", color: "#000" }}>
@@ -484,33 +457,6 @@ function Kiosk({ db, token, onExit }) {
 
                       <div style={{ textAlign: "center", fontSize: "10pt", marginTop: "10px", marginBottom: "25px", color: "#000" }}>
                         Computed as of {["January","February","March","April","May","June","July","August","September","October","November","December"][result.data.targetMonth-1]}, {new Date().getFullYear()}
-                      </div>
-
-                      <div style={{ textIndent: "40px", fontSize: "10pt", textAlign: "justify", marginBottom: "15px", lineHeight: "1.6", color: "#000" }}>
-                        To avoid the inconveniences of a legal action which we may be compelled to pursue to enforce collection, you are given a period of <strong>FIFTEEN (15) DAYS</strong> from receipt hereof to fully settle the total real property tax due.
-                      </div>
-                      <div style={{ textIndent: "40px", fontSize: "10pt", textAlign: "justify", marginBottom: "40px", lineHeight: "1.6", color: "#000" }}>
-                        However, if the above-mentioned taxes have already been paid, <strong>PLEASE DISREGARD THIS NOTICE</strong> and please present to us all the official receipts as evidence of full-payment and a photo copy of the present receipts for the proper adjustments of the records.
-                      </div>
-
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "50px", pageBreakInside: "avoid", color: "#000" }}>
-                        <div>
-                          <span style={{ fontSize: "10pt" }}>Prepared by:</span><br/><br/><br/>
-                          <strong style={{ fontSize: "11pt" }}>SYSTEM GENERATED</strong><br/>
-                          <div style={{ fontSize: "11pt" }}>Taxpayer Self-Service Kiosk</div>
-                        </div>
-                        <div style={{ textAlign: "center" }}>
-                          <span style={{ fontSize: "10pt" }}>Noted by:</span><br/><br/><br/>
-                          <strong style={{ fontSize: "11pt" }}>DINIA A. TAÑEDO</strong><br/>
-                          <div style={{ fontSize: "11pt" }}>Municipal Treasurer</div>
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: "left", fontSize: "10pt", lineHeight: "2", pageBreakInside: "avoid", color: "#000" }}>
-                        <div>Date received: <span style={{display: "inline-block", borderBottom: "1px solid #000", width: "300px"}}></span></div>
-                        <div>Signature: <span style={{display: "inline-block", borderBottom: "1px solid #000", width: "322px"}}></span></div>
-                        <div>Printed Name: <span style={{display: "inline-block", borderBottom: "1px solid #000", width: "300px"}}></span></div>
-                        <div>Property Owner/Administrator: <span style={{display: "inline-block", borderBottom: "1px solid #000", width: "198px"}}></span></div>
                       </div>
                     </>
                   )}
