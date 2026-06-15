@@ -114,3 +114,41 @@ body, html, #root {
   min-height: 100vh;
   min-width: 100vh;
 }
+/* 🌟 LGU COLOR PALETTE & GLOBAL RESET */
+:root {
+  --lgu-navy: #1E3A5F;
+  --lgu-gold: #D4A017;
+  --lgu-gray: #F5F7FA;
+  --lgu-white: #FFFFFF;
+}
+
+/* This fixes the black bars! Forces the whole screen to light gray */
+html, body, #root {
+  background-color: var(--lgu-gray) !important;
+  color: #333333;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom Gold Button */
+.btn-gold {
+  background-color: var(--lgu-gold);
+  color: var(--lgu-white);
+  border: 1px solid #B8860B;
+  font-weight: 600;
+}
+.btn-gold:hover {
+  background-color: #B8860B;
+  color: var(--lgu-white);
+}
+
+/* Navy Helpers */
+.text-navy { color: var(--lgu-navy) !important; }
+.bg-navy { background-color: var(--lgu-navy) !important; color: var(--lgu-white) !important; }
+
+/* Hide Sidebar when printing */
+@media print {
+  .no-print-sidebar { display: none !important; }
+  .print-expand { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+}
