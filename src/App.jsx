@@ -2230,7 +2230,7 @@ function Collection({ token, profile }) {
   const reset = () => { setStep(1);setFound(null);setPropList([]);setSelProp(null);setAsmt(null);setIssued(null);setQ("");setErr("");setOrNumber("");setSelectedProps([]); setMultiPropData([]); };
 
   if (step===4 && issued) return (
-    <>
+    <div>
       <div className="topbar"><div className="topbar-left"><h1>Receipt Issued</h1></div></div>
       <div className="page-body">
         <div className="banner banner-success"><span className="banner-icon">✓</span><span>{issued.or_number} successfully posted — {fmt(issued.total_paid)}</span></div>
@@ -2294,11 +2294,11 @@ function Collection({ token, profile }) {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 
   return (
-    <>
+    <div>
       <div className="topbar">
         <div className="topbar-left"><h1>Collection</h1><p>REAL PROPERTY TAX PAYMENT PROCESSING</p></div>
       </div>
@@ -2354,13 +2354,14 @@ function Collection({ token, profile }) {
                   </div>
                 ))
             }
-            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16}}>
+           <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16}}>
               <button className="btn btn-ghost btn-sm" onClick={()=>setStep(1)}>← Back</button>
               {propList.length > 0 && <button className="btn btn-primary" onClick={proceedWithSelected} disabled={selectedProps.length === 0}>Compute Selected ({selectedProps.length}) →</button>}
             </div>
+          </div>
         )}
 
-        {step===3 && selProp && (
+        {step===3 && selectedProps.length > 0 && (
           <div className="two-col">
             <div>
               
@@ -2520,7 +2521,7 @@ function Collection({ token, profile }) {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 /* ═══════════════════════════════════════════════════════════
