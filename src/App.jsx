@@ -1239,11 +1239,11 @@ function Taxpayers({ token, profile }) {
     "RIZAL (POB.)", "RODRIGUEZ (POB.)"
   ];
 
-  // 🌟 NEW: Fetch the total global counts from the database
+ // 🌟 FIXED: Added limit: 50000 to bypass the 1,000 row Supabase cap
   const loadTotals = useCallback(async () => {
     try {
-      const tp = await db.select("taxpayers", { select: "id" }, token);
-      const pr = await db.select("properties", { select: "id" }, token);
+      const tp = await db.select("taxpayers", { select: "id", limit: 50000 }, token);
+      const pr = await db.select("properties", { select: "id", limit: 50000 }, token);
       setTotals({ taxpayers: tp?.length || 0, properties: pr?.length || 0 });
     } catch(e) { console.error("Error loading totals:", e); }
   }, [token]);
@@ -3654,7 +3654,7 @@ function Reports({ token, profile }) {
       setLoading(true);
       try {
         if (tab === "analytics") {
-          const p = await db.select("properties", { select: "barangay, classification" }, token);
+          const p = await db.select("properties", { select: "barangay, classification", limit: 50000 }, token);
           const safeP = Array.isArray(p) ? p : [];
           
           const bCounts = {};
