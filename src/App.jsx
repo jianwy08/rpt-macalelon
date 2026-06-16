@@ -2215,10 +2215,13 @@ function Collection({ token, profile }) {
       
       await db.insert("official_receipts",{or_number:mainOr, collection_id:col.id, printed_by:profile?.id, print_count:0},token);
       
+      // 🌟 FIXED: Only mark the delinquency as PAID if they settle the 4th Quarter!
       for (const item of dbCart) {
-        try {
-          await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${item.property_id}&tax_year=eq.${item.year}` }, token);
-        } catch (updateErr) {}
+        if (item.quarterTag === "FULL" || item.quarterTag.includes("4")) {
+          try {
+            await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${item.property_id}&tax_year=eq.${item.year}` }, token);
+          } catch (updateErr) {}
+        }
       }
       
       setIssued({...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, properties:selectedProps, cashier:profile?.full_name});
