@@ -2241,7 +2241,8 @@ function Collection({ token, profile }) {
               </div>
               <div className="or-number">OFFICIAL RECEIPT NO. {issued.or_number}</div>
               <div className="or-divider"/>
-              {[["Date:",today()],["Taxpayer:",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By:", issued.paid_by],["Address:",issued.taxpayer.address||"—"],["TD Number:",issued.property?.td_number||"—"],["Tax Year:",issued.tax_year],["Payment:",issued.payment_method]].map(([k,v])=>(
+              {/* 🌟 FIND this block and change today() to issued.payment_date */}
+              {[["Date:", issued.payment_date], ["Taxpayer:",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By:", issued.paid_by],["Address:",issued.taxpayer.address||"—"],["TD Number:",issued.property?.td_number||"—"],["Tax Year:",issued.tax_year],["Payment:",issued.payment_method]].map(([k,v])=>(
                 <div className="or-line" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
               ))}
               <div className="or-breakdown" style={{ marginTop: "16px", marginBottom: "16px", borderTop: "1px dashed #ccc", borderBottom: "1px dashed #ccc", padding: "12px 0" }}>
@@ -2435,6 +2436,16 @@ function Collection({ token, profile }) {
                       <input value={checkNo} onChange={e=>setCheckNo(e.target.value)}/>
                     </div>
                   )}
+                  <div className="form-group">
+                    <label className="form-label" style={{color: "var(--blue2)", fontWeight: "bold"}}>Actual Date Paid (For Encoding)</label>
+                    <input 
+                      type="date" 
+                      value={paymentDate} 
+                      onChange={e => setPaymentDate(e.target.value)} 
+                      max={today()} 
+                      style={{ border: "2px solid var(--blue2)" }}
+                    />
+                  </div>
 
                   <div className="form-group span2" style={{marginTop: "8px"}}>
                     <label className="form-label">Paid By (Actual person paying)</label>
