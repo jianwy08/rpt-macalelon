@@ -250,21 +250,25 @@ function Kiosk({ db, token, onExit }) {
     setLoading(false);
   };
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#f0f4f8", display: "flex", flexDirection: "column", fontFamily: "'Outfit', sans-serif" }}>
+return (
+    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", fontFamily: "'Outfit', sans-serif" }}>
       <style>{`
-        .k-box { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.08); width: 100%; max-width: 800px; text-align: center; border: 1px solid #e2e8f0; }
+        .k-box { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.08); width: 100%; max-width: 800px; text-align: center; border: 1px solid rgba(0,0,0,0.05); }
         .k-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
         .k-tab { padding: 24px; border-radius: 16px; border: 2px solid #e2e8f0; background: #f8fafc; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .k-tab.active { border-color: #2563eb; background: #eff6ff; box-shadow: 0 4px 12px rgba(37,99,235,0.15); transform: translateY(-2px); }
+        /* Navy & Gold Tab Active States */
+        .k-tab.active { border-color: #1E3A5F; background: rgba(30,58,95,0.05); box-shadow: 0 4px 12px rgba(30,58,95,0.1); transform: translateY(-2px); }
         .k-input { width: 100%; padding: 20px; font-size: 24px; border: 2px solid #cbd5e1; border-radius: 12px; text-align: center; outline: none; transition: 0.2s; box-sizing: border-box; background: white; color: #0f172a; }
-        .k-input:focus { border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37,99,235,0.1); }
-        .k-btn { background: #2563eb; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 12px; cursor: pointer; width: 100%; transition: 0.2s; }
-        .k-btn:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(37,99,235,0.3); }
+        .k-input:focus { border-color: #D4A017; box-shadow: 0 0 0 4px rgba(212,168,67,0.15); }
+        /* Gold Primary Button */
+        .k-btn { background: #D4A017; color: white; border: none; padding: 20px 40px; font-size: 20px; font-weight: bold; border-radius: 12px; cursor: pointer; width: 100%; transition: 0.2s; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .k-btn:hover:not(:disabled) { background: #B8860B; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(212,168,67,0.3); }
         .k-btn:active:not(:disabled) { transform: translateY(0); }
         .k-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-        .k-btn-outline { background: transparent; border: 2px solid #2563eb; color: #2563eb; }
-        .prop-list-btn:hover { background: #eff6ff; border-color: #3b82f6; }
+        /* Navy Outline Button */
+        .k-btn-outline { background: transparent; border: 2px solid #1E3A5F; color: #1E3A5F; text-shadow: none; }
+        .k-btn-outline:hover:not(:disabled) { background: #1E3A5F; color: white; }
+        .prop-list-btn:hover { background: rgba(30,58,95,0.05); border-color: #1E3A5F; }
 
         @media print {
           @page { size: A4 portrait; margin: 15mm; }
@@ -279,15 +283,20 @@ function Kiosk({ db, token, onExit }) {
         }
       `}</style>
 
-      <div className="no-print" style={{ background: "#1e3a8a", padding: "20px 40px", color: "white", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <img src="https://i.postimg.cc/VktjPybt/macalelon-logo.png" alt="Logo" style={{ width: "64px", height: "64px", background: "white", borderRadius: "50%", padding: "4px" }} />
-            <div>
-              <h1 style={{ margin: 0, fontSize: "28px", fontWeight: "800", fontFamily: "Georgia, serif" }}>Municipality of Macalelon</h1>
-              <div style={{ fontSize: "16px", color: "#93c5fd", textTransform: "uppercase", letterSpacing: "2px", fontWeight: "bold", marginTop: "4px" }}>Real Property Tax Kiosk</div>
-            </div>
-        </div>
-        {onExit && <button className="k-btn k-btn-outline" style={{padding: "10px 20px", width: "auto", borderColor: "white", color: "white", fontSize: "16px"}} onClick={onExit}>✕ Close</button>}
+      {/* 🌟 KIOSK MUNICIPAL HEADER (Navy & Gold) */}
+      <div className="no-print" style={{ backgroundColor: "#1E3A5F", color: "#FFFFFF", textAlign: "center", padding: "30px 20px", borderBottom: "5px solid #D4A017", boxShadow: "0 4px 10px rgba(0,0,0,0.2)", position: "relative" }}>
+        <img src="https://i.postimg.cc/VktjPybt/macalelon-logo.png" alt="LGU Logo" style={{ width: "90px", height: "90px", backgroundColor: "#fff", borderRadius: "50%", padding: "2px", marginBottom: "12px" }} />
+        <h2 style={{ fontWeight: "bold", margin: 0, letterSpacing: "1px", textTransform: "uppercase", fontSize: "28px" }}>Municipality of Macalelon</h2>
+        <h5 style={{ fontWeight: 300, margin: "5px 0 0 0", color: "rgba(255,255,255,0.8)", fontSize: "16px", textTransform: "uppercase", letterSpacing: "2px" }}>Real Property Tax Self-Service Kiosk</h5>
+        
+        {onExit && (
+          <button 
+            onClick={onExit} 
+            style={{ position: "absolute", top: "20px", left: "20px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontSize: "14px" }}
+          >
+            ← Exit Kiosk
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px" }}>
@@ -312,7 +321,7 @@ function Kiosk({ db, token, onExit }) {
             </div>
 
             <div style={{ marginBottom: "30px" }}>
-              <div style={{ fontSize: "18px", fontWeight: "bold", color: "#334155", marginBottom: "12px" }}>
+              <div style={{ fontSize: "18px", fontWeight: "bold", color: "#1E3A5F", marginBottom: "12px" }}>
                 {searchMode === "SOA" ? "👉 Enter your Last Name, PIN, or TD Number:" : "👉 Enter OR Number, Payor Name, or Taxpayer Name:"}
               </div>
               <input 
@@ -332,22 +341,22 @@ function Kiosk({ db, token, onExit }) {
 
         {!result && multiProps && (
           <div className="k-box">
-             <div className="no-print" style={{ background: "#e0e7ff", padding: "8px", color: "#1e40af", fontWeight: "bold", borderRadius: "8px", marginBottom: "20px" }}>
+             <div className="no-print" style={{ background: "rgba(30, 58, 95, 0.1)", padding: "8px", color: "#1E3A5F", fontWeight: "bold", borderRadius: "8px", marginBottom: "20px" }}>
                Session expires in {timeLeft} seconds
              </div>
              
-             <h2 style={{fontSize: "28px", color: "#0f172a", marginBottom: "10px"}}>Multiple Properties Found</h2>
+             <h2 style={{fontSize: "28px", color: "#1E3A5F", marginBottom: "10px"}}>Multiple Properties Found</h2>
              <p style={{fontSize: "18px", color: "#64748b", marginBottom: "30px"}}>Please select which property you want to view the SOA for:</p>
              
              <div style={{display: "flex", flexDirection: "column", gap: "12px", maxHeight: "400px", overflowY: "auto", paddingRight: "10px"}}>
                 {multiProps.map(p => (
                    <button key={p.id} className="k-tab prop-list-btn" style={{flexDirection: "row", justifyContent: "space-between", textAlign: "left", padding: "20px"}} onClick={() => fetchSOA(p)}>
                       <div>
-                        <div style={{fontWeight: "bold", fontSize: "18px", color: "#0f172a"}}>TD: {p.td_number}</div>
-                        <div style={{fontSize: "14px", color: "#3b82f6", fontWeight: "bold", marginTop: "4px"}}>PIN: {p.property_index_no || "—"}</div>
+                        <div style={{fontWeight: "bold", fontSize: "18px", color: "#1E3A5F"}}>TD: {p.td_number}</div>
+                        <div style={{fontSize: "14px", color: "#D4A017", fontWeight: "bold", marginTop: "4px"}}>PIN: {p.property_index_no || "—"}</div>
                         <div style={{fontSize: "14px", color: "#64748b", marginTop: "4px"}}>{p.taxpayers?.lastname}, {p.taxpayers?.firstname} · Brgy. {p.barangay}</div>
                       </div>
-                      <div style={{fontSize: "24px", color: "#2563eb", fontWeight: "bold"}}>→</div>
+                      <div style={{fontSize: "24px", color: "#D4A017", fontWeight: "bold"}}>→</div>
                    </button>
                 ))}
              </div>
@@ -358,23 +367,23 @@ function Kiosk({ db, token, onExit }) {
 
         {!result && multiOrs && (
           <div className="k-box">
-             <div className="no-print" style={{ background: "#e0e7ff", padding: "8px", color: "#1e40af", fontWeight: "bold", borderRadius: "8px", marginBottom: "20px" }}>
+             <div className="no-print" style={{ background: "rgba(30, 58, 95, 0.1)", padding: "8px", color: "#1E3A5F", fontWeight: "bold", borderRadius: "8px", marginBottom: "20px" }}>
                Session expires in {timeLeft} seconds
              </div>
              
-             <h2 style={{fontSize: "28px", color: "#0f172a", marginBottom: "10px"}}>Multiple Receipts Found</h2>
+             <h2 style={{fontSize: "28px", color: "#1E3A5F", marginBottom: "10px"}}>Multiple Receipts Found</h2>
              <p style={{fontSize: "18px", color: "#64748b", marginBottom: "30px"}}>Please select which Official Receipt you want to verify:</p>
              
              <div style={{display: "flex", flexDirection: "column", gap: "12px", maxHeight: "400px", overflowY: "auto", paddingRight: "10px"}}>
                 {multiOrs.map(or => (
                    <button key={or.or_number} className="k-tab prop-list-btn" style={{flexDirection: "row", justifyContent: "space-between", textAlign: "left", padding: "20px"}} onClick={() => fetchOR(or)}>
                       <div>
-                        <div style={{fontWeight: "bold", fontSize: "18px", color: "#0f172a"}}>OR No: {or.or_number}</div>
-                        <div style={{fontSize: "14px", color: "#3b82f6", fontWeight: "bold", marginTop: "4px"}}>Date Paid: {or.payment_date}</div>
+                        <div style={{fontWeight: "bold", fontSize: "18px", color: "#1E3A5F"}}>OR No: {or.or_number}</div>
+                        <div style={{fontSize: "14px", color: "#D4A017", fontWeight: "bold", marginTop: "4px"}}>Date Paid: {or.payment_date}</div>
                         <div style={{fontSize: "14px", color: "#64748b", marginTop: "4px"}}>Taxpayer: {or.taxpayer?.lastname}, {or.taxpayer?.firstname}</div>
                         <div style={{fontSize: "15px", color: "#16a34a", fontWeight: "bold", marginTop: "6px"}}>Total Paid: ₱{fmt(or.sum_total)}</div>
                       </div>
-                      <div style={{fontSize: "24px", color: "#2563eb", fontWeight: "bold"}}>→</div>
+                      <div style={{fontSize: "24px", color: "#D4A017", fontWeight: "bold"}}>→</div>
                    </button>
                 ))}
              </div>
@@ -385,7 +394,7 @@ function Kiosk({ db, token, onExit }) {
 
         {result && (
           <div className="k-box kiosk-print-area" style={{ width: "850px", maxWidth: "100%", padding: 0, overflow: "hidden", background: "#fff", color: "#000", fontFamily: "Arial, sans-serif" }}>
-            <div className="no-print" style={{ background: "#e0e7ff", padding: "12px 20px", color: "#1e40af", fontWeight: "bold" }}>
+            <div className="no-print" style={{ background: "rgba(30, 58, 95, 0.1)", padding: "12px 20px", color: "#1E3A5F", fontWeight: "bold" }}>
               Session expires in {timeLeft} seconds
             </div>
             <div style={{ padding: "40px 50px" }}>
@@ -526,7 +535,7 @@ function Kiosk({ db, token, onExit }) {
 
               <div className="no-print" style={{ display: "flex", gap: "16px", marginTop: "40px" }}>
                 {result.type === "SOA" && result.data?.delinquencies?.length !== 0 && (
-                  <button className="k-btn" style={{ flex: 2 }} onClick={() => { window.print(); resetTimer(); }}>🖨️ Print Statement</button>
+                  <button className="k-btn" style={{ flex: 2, background: "#1E3A5F" }} onClick={() => { window.print(); resetTimer(); }}>🖨️ Print Statement</button>
                 )}
                 <button className="k-btn k-btn-outline" style={{ flex: 1 }} onClick={resetKiosk}>Done</button>
               </div>

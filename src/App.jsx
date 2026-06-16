@@ -517,9 +517,17 @@ input[type="checkbox"] { width: auto; }
 
 /* ── Login ── */
 .login-shell {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; 
+  width: 100vw;           /* 🌟 Forces full screen width */
+  position: absolute;     /* 🌟 Ignores Vite/Bootstrap constraints */
+  top: 0;                 
+  left: 0;                
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
   background: var(--bg);
   background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(212,168,67,0.08) 0%, transparent 60%);
+}
 }
 .login-box {
   width: 420px; background: var(--panel);
