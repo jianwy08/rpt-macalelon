@@ -404,7 +404,8 @@ return (
                         <div style={{fontWeight: "bold", fontSize: "18px", color: "#1E3A5F"}}>OR No: {or.or_number}</div>
                         <div style={{fontSize: "14px", color: "#D4A017", fontWeight: "bold", marginTop: "4px"}}>Date Paid: {or.payment_date}</div>
                         <div style={{fontSize: "14px", color: "#64748b", marginTop: "4px"}}>Taxpayer: {or.taxpayer?.lastname}, {or.taxpayer?.firstname}</div>
-                        <div style={{fontSize: "13px", color: "#64748b", marginTop: "4px"}}>PIN(s): {Array.from(or.pinSet || []).join(", ")}</div>
+                        {/* 🌟 FIXED: Shows exactly what they searched instead of listing all properties */}
+                        <div style={{fontSize: "13px", color: "#2563eb", marginTop: "4px", fontWeight: "bold"}}>Search Match: {q}</div>
                         <div style={{fontSize: "15px", color: "#16a34a", fontWeight: "bold", marginTop: "6px"}}>Total Paid: ₱{fmt(or.sum_total)}</div>
                       </div>
                       <div style={{fontSize: "24px", color: "#D4A017", fontWeight: "bold"}}>→</div>
@@ -536,10 +537,10 @@ return (
                       </div>
                     )}
                     
-                    {/* 🌟 NEW: Display PINs */}
+                    {/* 🌟 FIXED: Shows the specific Name, PIN, or TD they searched for */}
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
-                      <span style={{ color: "#64748b" }}>Property PIN(s):</span>
-                      <span style={{ fontWeight: "bold", textAlign: "right", maxWidth: "60%" }}>{result.data.pins}</span>
+                      <span style={{ color: "#64748b" }}>Verified Match:</span>
+                      <span style={{ fontWeight: "bold", color: "#1E3A5F", textAlign: "right", maxWidth: "60%" }}>{q}</span>
                     </div>
 
                     {/* 🌟 NEW: Formatted Quarters */}
