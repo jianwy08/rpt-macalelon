@@ -2111,7 +2111,8 @@ function Collection({ token, profile }) {
         if (delinqRecords && delinqRecords.length > 0) startingYear = Math.min(...delinqRecords.map(d => parseInt(d.tax_year)));
         if (startingYear < globalMinYear) globalMinYear = startingYear;
 
-        enrichedProps.push({ prop: p, history: history || [], paidYears: yearsPaid });
+       // 🌟 FIXED: Changed 'paidYears: yearsPaid' to 'paidQs: paidQs'
+        enrichedProps.push({ prop: p, history: history || [], paidQs: paidQs }); 
       }
       
       setMultiPropData(enrichedProps);
