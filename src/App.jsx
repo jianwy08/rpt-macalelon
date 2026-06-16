@@ -2021,6 +2021,22 @@ function Collection({ token, profile }) {
   const [paymentDate, setPaymentDate] = useState(today());
   const rd = (num) => Math.floor((parseFloat(num) || 0) * 100 + 0.0001) / 100;
 
+  // 🌟 NEW: Smart parser to understand exactly which quarters have been paid
+  const parseQuarters = (qStr) => {
+    if (!qStr || qStr === "FULL") return [1,2,3,4];
+    if (qStr.includes("-")) {
+       const m = qStr.match(/Q(\d)-Q(\d)/);
+       if (m) {
+          let qs = [];
+          for(let i=parseInt(m[1]); i<=parseInt(m[2]); i++) qs.push(i);
+          return qs;
+       }
+    }
+    const m = qStr.match(/Q(\d)/);
+    if (m) return [parseInt(m[1])];
+    return [1,2,3,4];
+  };
+
   const search = async () => {
     setErr("");
     try {
@@ -2077,7 +2093,18 @@ function Collection({ token, profile }) {
       for (const p of selectedProps) {
         const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
         const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
-        const yearsPaid = payments ? payments.map(pay => parseInt(pay.tax_year)) : [];
+        
+        // 🌟 FIXED: Map exact quarters paid instead of just the year
+        let paidQs = {};
+        if (payments) {
+          payments.forEach(pay => {
+            const y = parseInt(pay.tax_year);
+            if (!paidQs[y]) paidQs[y] = [];
+            const qs = parseQuarters(pay.quarter);
+            qs.forEach(q => { if (!paidQs[y].includes(q)) paidQs[y].push(q); });
+          });
+        }
+        
         const delinqRecords = await db.select("delinquency", { filter: `property_id=eq.${p.id}&status=eq.UNPAID` }, token);
         
         let startingYear = new Date().getFullYear(); 
@@ -2119,11 +2146,17 @@ function Collection({ token, profile }) {
     const qLabel = qCount === 4 ? "FULL" : (startQ === endQ ? `Q${startQ}` : `Q${startQ}-Q${endQ}`);
     const displayLabel = qCount === 4 ? y : `${y} (${qLabel})`;
 
-    let quartersToPay = [];
-    for (let q = startQ; q <= endQ; q++) quartersToPay.push(q);
-
     for (const mp of multiPropData) {
-      if (mp.paidYears.includes(y)) continue; 
+      // 🌟 FIXED: Filter out quarters that are already paid
+      const alreadyPaidQs = mp.paidQs?.[y] || [];
+      let quartersToPay = [];
+      for (let q = startQ; q <= endQ; q++) {
+        if (!alreadyPaidQs.includes(q)) quartersToPay.push(q);
+      }
+      
+      // If the remaining array is empty, they truly paid for these specific quarters
+      if (quartersToPay.length === 0) continue; 
+      
       allPaidThisYear = false;
 
       const activeAsmt = mp.history.find(a => parseInt(a.tax_year) <= y);
@@ -2224,7 +2257,10 @@ function Collection({ token, profile }) {
         }
       }
       
-      setIssued({...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, properties:selectedProps, cashier:profile?.full_name});
+      // 🌟 NEW: Extract the quarter tags and send them to the receipt
+      const allQTags = Array.from(new Set(dbCart.map(c => c.quarterTag))).join(", ");
+      
+      setIssued({...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, quarter_str: allQTags, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, properties:selectedProps, cashier:profile?.full_name});
       setStep(4);
     } catch(e){ setErr(e.message); }
     setPosting(false);
@@ -2249,7 +2285,18 @@ function Collection({ token, profile }) {
               <div className="or-number">OFFICIAL RECEIPT NO. {issued.or_number}</div>
               <div className="or-divider"/>
               {/* 🌟 FIND this block and change today() to issued.payment_date */}
-              {[["Date:", issued.payment_date], ["Taxpayer:",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By:", issued.paid_by],["Address:",issued.taxpayer.address||"—"],["TD Number:",issued.property?.td_number||"—"],["Tax Year:",issued.tax_year],["Payment:",issued.payment_method]].map(([k,v])=>(
+              {[
+                ["Date:", issued.payment_date], 
+                ["Taxpayer:",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],
+                ["Paid By:", issued.paid_by],
+                ["Address:",issued.taxpayer.address||"—"],
+                ["TD Number:",issued.properties?.length > 1 ? "MULTIPLE PROPERTIES" : issued.properties?.[0]?.td_number||"—"],
+                
+                /* 🌟 HERE IS THE UPDATED LINE! */
+                ["Year & Qtr:", `${issued.tax_year} (${issued.quarter_str})`],
+                
+                ["Payment:",issued.payment_method]
+              ].map(([k,v])=>(
                 <div className="or-line" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
               ))}
               <div className="or-breakdown" style={{ marginTop: "16px", marginBottom: "16px", borderTop: "1px dashed #ccc", borderBottom: "1px dashed #ccc", padding: "12px 0" }}>
@@ -2290,7 +2337,7 @@ function Collection({ token, profile }) {
           <div className="panel">
             <div className="panel-title">Transaction Summary</div>
             <div className="detail-grid">
-              {[["OR Number",issued.or_number],["Taxpayer",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By", issued.paid_by],["TD No.",issued.property?.td_number||"—"],["Tax Year",issued.tax_year],["Quarter",issued.quarter],["Basic RPT",fmt(issued.basic_tax)],["SEF",fmt(issued.sef_tax)],["Total",fmt(issued.total_paid)],["Method",issued.payment_method],["Cashier",issued.cashier||"—"]].map(([k,v])=>(
+              {[["OR Number",issued.or_number],["Taxpayer",`${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],["Paid By", issued.paid_by],["TD No.",issued.property?.td_number||"—"],["Tax Year",issued.tax_year],["Quarter(s)",issued.quarter_str],["Basic RPT",fmt(issued.basic_tax)],["SEF",fmt(issued.sef_tax)],["Total",fmt(issued.total_paid)],["Method",issued.payment_method],["Cashier",issued.cashier||"—"]].map(([k,v])=>(
                 <div className="drow" key={k}><span className="dk">{k}</span><span className="dv">{v}</span></div>
               ))}
             </div>
