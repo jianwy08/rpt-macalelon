@@ -540,6 +540,12 @@ return (
                       </div>
                     )}
                     
+                    {/* 🌟 RESTORED: Display PINs */}
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
+                      <span style={{ color: "#64748b" }}>Property PIN(s):</span>
+                      <span style={{ fontWeight: "bold", textAlign: "right", maxWidth: "60%" }}>{result.data.pins}</span>
+                    </div>
+
                     {/* 🌟 FIXED: Shows the specific Name, PIN, or TD they searched for */}
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
                       <span style={{ color: "#64748b" }}>Verified Match:</span>
