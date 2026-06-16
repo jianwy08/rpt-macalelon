@@ -161,9 +161,9 @@ function Kiosk({ db, token, onExit }) {
   };
 
   const fetchOR = (groupedData) => {
-    // 🌟 NEW: Format the quarters (turns a Set into a nice string)
-    const qArr = Array.from(groupedData.qSet || []);
-    const qStr = (qArr.length === 1 && qArr[0] === "FULL") ? "FULL YEAR" : qArr.join(", ");
+    // 🌟 NEW: Convert Sets to perfectly formatted strings
+    const qStr = Array.from(groupedData.qSet || []).join(", ");
+    const pinStr = Array.from(groupedData.pinSet || []).join(", ");
 
     setResult({
       type: "OR",
@@ -172,8 +172,8 @@ function Kiosk({ db, token, onExit }) {
         payment_date: groupedData.payment_date,
         taxpayer: groupedData.taxpayer,
         paid_by: groupedData.paid_by,
-        years: groupedData.minYear === groupedData.maxYear ? groupedData.minYear : `${groupedData.minYear} - ${groupedData.maxYear}`,
-        quarters: qStr, // 🌟 NEW: Send quarters to the UI
+        pins: pinStr,     // 🌟 NEW: Send PINs to the UI
+        quarters: qStr,   // 🌟 NEW: Send Year-Quarters to the UI
         totals: { basic: groupedData.sum_basic, sef: groupedData.sum_sef, penalty: groupedData.sum_penalty, grand: groupedData.sum_total }
       }
     });
@@ -210,20 +210,20 @@ function Kiosk({ db, token, onExit }) {
 
         await fetchSOA(props[0]);
 
-     } else {
+    } else {
         const tps = await db.select("taxpayers", { filter: `or=(lastname.ilike.*${cleanQ}*,firstname.ilike.*${cleanQ}*)`, select: "id" }, token);
         const tpIds = tps ? tps.map(t => t.id) : [];
 
-        // 🌟 NEW: Support searching OR by Property PIN
         const propsMatch = await db.select("properties", { filter: `property_index_no.ilike.*${cleanQ}*`, select: "id" }, token);
         const propIds = propsMatch ? propsMatch.map(p => p.id) : [];
 
         let filterStr = `or=(or_number.ilike.*${cleanQ}*,paid_by.ilike.*${cleanQ}*`;
         if (tpIds.length > 0) filterStr += `,taxpayer_id.in.(${tpIds.join(',')})`;
-        if (propIds.length > 0) filterStr += `,property_id.in.(${propIds.join(',')})`; // 🌟 Include PIN IDs
+        if (propIds.length > 0) filterStr += `,property_id.in.(${propIds.join(',')})`;
         filterStr += `)`;
 
-        const collections = await db.select("collections", { filter: filterStr, select: "*, taxpayers(firstname, lastname)" }, token);
+        // 🌟 NEW: Fetch the properties relation so we can get the PINs
+        const collections = await db.select("collections", { filter: filterStr, select: "*, taxpayers(firstname, lastname), properties(property_index_no, td_number)" }, token);
 
         if (!collections || collections.length === 0) {
           setError("Official Receipt, Payor, or PIN not found in the system.");
@@ -234,21 +234,31 @@ function Kiosk({ db, token, onExit }) {
           if (!acc[c.or_number]) {
             acc[c.or_number] = {
               or_number: c.or_number, payment_date: c.payment_date, taxpayer: c.taxpayers, paid_by: c.paid_by,
-              sum_total: 0, sum_basic: 0, sum_sef: 0, sum_penalty: 0, minYear: 9999, maxYear: 0,
-              qSet: new Set() // 🌟 NEW: Track quarters
+              sum_total: 0, sum_basic: 0, sum_sef: 0, sum_penalty: 0, 
+              qSet: new Set(), pinSet: new Set() // 🌟 NEW: Track sets
             };
           }
           acc[c.or_number].sum_total += parseFloat(c.total_paid) || 0;
           acc[c.or_number].sum_basic += parseFloat(c.basic_tax) || 0;
           acc[c.or_number].sum_sef += parseFloat(c.sef_tax) || 0;
           acc[c.or_number].sum_penalty += parseFloat(c.penalty) || 0;
-          if (c.quarter) acc[c.or_number].qSet.add(c.quarter); // Add quarter to set
           
-          const y = parseInt(c.tax_year);
-          if (y < acc[c.or_number].minYear) acc[c.or_number].minYear = y;
-          if (y > acc[c.or_number].maxYear) acc[c.or_number].maxYear = y;
+          // 🌟 NEW: Format Quarters exactly as requested (e.g., 2000-Q1 or 2002)
+          if (c.tax_year) {
+            const qTag = (!c.quarter || c.quarter === "FULL") ? c.tax_year : `${c.tax_year}-${c.quarter}`;
+            acc[c.or_number].qSet.add(qTag);
+          }
+          
+          // 🌟 NEW: Track PINs
+          if (c.properties) {
+            acc[c.or_number].pinSet.add(c.properties.property_index_no || c.properties.td_number || "—");
+          }
+          
           return acc;
         }, {}));
+
+        // 🌟 NEW: Sort so the newest receipts are ALWAYS at the top!
+        groupedORs.sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date));
 
         if (groupedORs.length > 1) {
           setMultiOrs(groupedORs);
@@ -257,7 +267,7 @@ function Kiosk({ db, token, onExit }) {
         }
 
         fetchOR(groupedORs[0]);
-      } 
+      }
       
     } catch (e) { setError("System error. Please check database permissions or internet connection."); }
     setLoading(false);
@@ -394,6 +404,7 @@ return (
                         <div style={{fontWeight: "bold", fontSize: "18px", color: "#1E3A5F"}}>OR No: {or.or_number}</div>
                         <div style={{fontSize: "14px", color: "#D4A017", fontWeight: "bold", marginTop: "4px"}}>Date Paid: {or.payment_date}</div>
                         <div style={{fontSize: "14px", color: "#64748b", marginTop: "4px"}}>Taxpayer: {or.taxpayer?.lastname}, {or.taxpayer?.firstname}</div>
+                        <div style={{fontSize: "13px", color: "#64748b", marginTop: "4px"}}>PIN(s): {Array.from(or.pinSet || []).join(", ")}</div>
                         <div style={{fontSize: "15px", color: "#16a34a", fontWeight: "bold", marginTop: "6px"}}>Total Paid: ₱{fmt(or.sum_total)}</div>
                       </div>
                       <div style={{fontSize: "24px", color: "#D4A017", fontWeight: "bold"}}>→</div>
@@ -516,23 +527,25 @@ return (
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
                       <span style={{ color: "#64748b" }}>Taxpayer:</span>
-                      <span style={{ fontWeight: "bold" }}>{result.data.taxpayer?.firstname} {result.data.taxpayer?.lastname}</span>
+                      <span style={{ fontWeight: "bold", textAlign: "right" }}>{result.data.taxpayer?.firstname} {result.data.taxpayer?.lastname}</span>
                     </div>
                     {result.data.paid_by && (
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
                         <span style={{ color: "#64748b" }}>Paid By:</span>
-                        <span style={{ fontWeight: "bold" }}>{result.data.paid_by}</span>
+                        <span style={{ fontWeight: "bold", textAlign: "right" }}>{result.data.paid_by}</span>
                       </div>
                     )}
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px", borderBottom: "1px dashed #cbd5e1", paddingBottom: "15px" }}>
-                      <span style={{ color: "#64748b" }}>Year(s) Covered:</span>
-                      <span style={{ fontWeight: "bold" }}>{result.data.years}</span>
+                    
+                    {/* 🌟 NEW: Display PINs */}
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
+                      <span style={{ color: "#64748b" }}>Property PIN(s):</span>
+                      <span style={{ fontWeight: "bold", textAlign: "right", maxWidth: "60%" }}>{result.data.pins}</span>
                     </div>
 
-                    {/* 🌟 NEW: Quarter row added to UI */}
+                    {/* 🌟 NEW: Formatted Quarters */}
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px", borderBottom: "1px dashed #cbd5e1", paddingBottom: "15px" }}>
-                      <span style={{ color: "#64748b" }}>Quarter(s) Paid:</span>
-                      <span style={{ fontWeight: "bold", color: "#1E3A5F" }}>{result.data.quarters}</span>
+                      <span style={{ color: "#64748b" }}>Year & Quarter(s):</span>
+                      <span style={{ fontWeight: "bold", color: "#1E3A5F", textAlign: "right", maxWidth: "60%" }}>{result.data.quarters}</span>
                     </div>
                     
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
