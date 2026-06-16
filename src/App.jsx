@@ -2083,8 +2083,8 @@ function Collection({ token, profile }) {
     }
   };
 
-  const proceedWithSelected = async () => {
-    if (selectedProps.length === 0) return;
+ const proceedWithSelected = async () => {
+    if (selectedProps.length === 0) { setErr("Please select at least one property to proceed."); return; }
     setErr(""); 
     try {
       let globalMinYear = new Date().getFullYear();
@@ -2094,7 +2094,7 @@ function Collection({ token, profile }) {
         const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
         const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
         
-        // 🌟 FIXED: Map exact quarters paid instead of just the year
+        // 🌟 Map exact quarters paid
         let paidQs = {};
         if (payments) {
           payments.forEach(pay => {
@@ -2108,11 +2108,13 @@ function Collection({ token, profile }) {
         const delinqRecords = await db.select("delinquency", { filter: `property_id=eq.${p.id}&status=eq.UNPAID` }, token);
         
         let startingYear = new Date().getFullYear(); 
-        if (delinqRecords && delinqRecords.length > 0) startingYear = Math.min(...delinqRecords.map(d => parseInt(d.tax_year)));
+        if (delinqRecords && delinqRecords.length > 0) {
+          startingYear = Math.min(...delinqRecords.map(d => parseInt(d.tax_year)));
+        }
         if (startingYear < globalMinYear) globalMinYear = startingYear;
 
-       // 🌟 FIXED: Changed 'paidYears: yearsPaid' to 'paidQs: paidQs'
-        enrichedProps.push({ prop: p, history: history || [], paidQs: paidQs }); 
+        // 🌟 FIXED: We strictly use paidQs now, yearsPaid is completely gone!
+        enrichedProps.push({ prop: p, history: history || [], paidQs: paidQs });
       }
       
       setMultiPropData(enrichedProps);
@@ -2120,7 +2122,9 @@ function Collection({ token, profile }) {
       setFromYear(String(globalMinYear));
       setToYear(String(Math.max(globalMinYear, new Date().getFullYear()))); 
       setStep(3);
-    } catch(e) { setErr("Failed to load property data: " + e.message); }
+    } catch(e) {
+      setErr("Failed to load property data: " + e.message);
+    }
   };
 
   const payDateObj = new Date(paymentDate || today());
