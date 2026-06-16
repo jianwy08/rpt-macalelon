@@ -251,7 +251,7 @@ function Kiosk({ db, token, onExit }) {
   };
 
 return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", fontFamily: "'Outfit', sans-serif" }}>
+   <div style={{ minHeight: "100vh", width: "100vw", position: "absolute", top: 0, left: 0, background: "var(--bg)", display: "flex", flexDirection: "column", fontFamily: "'Outfit', sans-serif" }}>
       <style>{`
         .k-box { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.08); width: 100%; max-width: 800px; text-align: center; border: 1px solid rgba(0,0,0,0.05); }
         .k-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }

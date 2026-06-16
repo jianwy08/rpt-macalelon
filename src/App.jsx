@@ -2016,7 +2016,7 @@ function Collection({ token, profile }) {
   const [posting,setPosting] = useState(false);
   const [issued,setIssued]   = useState(null);
   const [err,setErr]         = useState("");
-
+  const [paymentDate, setPaymentDate] = useState(today());
   const rd = (num) => Math.floor((parseFloat(num) || 0) * 100 + 0.0001) / 100;
 
   const search = async () => {
@@ -2087,8 +2087,9 @@ function Collection({ token, profile }) {
     }
   };
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  const payDateObj = new Date(paymentDate || today());
+  const currentYear = payDateObj.getFullYear();
+  const currentMonth = payDateObj.getMonth() + 1;
 
   let start = parseInt(fromYear) || currentYear;
   let end = parseInt(toYear) || currentYear;
@@ -2190,7 +2191,11 @@ function Collection({ token, profile }) {
         or_number: mainOr, 
         taxpayer_id: found.id, property_id: selProp?.id,
         assessment_id: asmt?.id, tax_year: item.year,
-        payment_date: today(), payment_method: method, 
+        
+        // 🌟 CHANGED: today() is now paymentDate
+        payment_date: paymentDate, 
+        
+        payment_method: method, 
         quarter: item.quarterTag,
         basic_tax: item.basic, sef_tax: item.sef, idle_tax: 0,
         penalty: item.pen, discount: item.disc, total_paid: item.total,
@@ -2211,7 +2216,8 @@ function Collection({ token, profile }) {
         }
       }
       
-      setIssued({...col, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, property:selProp, cashier:profile?.full_name});
+      // 🌟 CHANGED: Also added payment_date to the issued receipt object here
+      setIssued({...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, property:selProp, cashier:profile?.full_name});
       setStep(4);
     } catch(e){ setErr(e.message); }
     setPosting(false);
