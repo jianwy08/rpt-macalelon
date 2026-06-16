@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 function Kiosk({ db, token, onExit }) {
   const [searchMode, setSearchMode] = useState("SOA"); 
   const [q, setQ] = useState("");
+  const [searchedTerm, setSearchedTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
@@ -161,9 +162,11 @@ function Kiosk({ db, token, onExit }) {
   };
 
   const fetchOR = (groupedData) => {
-    // 🌟 NEW: Convert Sets to perfectly formatted strings
     const qStr = Array.from(groupedData.qSet || []).join(", ");
-    const pinStr = Array.from(groupedData.pinSet || []).join(", ");
+    
+    // 🌟 Safely format PINs so it never overflows the screen
+    const pinArr = Array.from(groupedData.pinSet || []);
+    const pinStr = pinArr.length > 2 ? `${pinArr[0]} (+${pinArr.length - 1} more properties)` : pinArr.join(", ");
 
     setResult({
       type: "OR",
@@ -172,8 +175,8 @@ function Kiosk({ db, token, onExit }) {
         payment_date: groupedData.payment_date,
         taxpayer: groupedData.taxpayer,
         paid_by: groupedData.paid_by,
-        pins: pinStr,     // 🌟 NEW: Send PINs to the UI
-        quarters: qStr,   // 🌟 NEW: Send Year-Quarters to the UI
+        pins: pinStr,     
+        quarters: qStr,   
         totals: { basic: groupedData.sum_basic, sef: groupedData.sum_sef, penalty: groupedData.sum_penalty, grand: groupedData.sum_total }
       }
     });
@@ -211,10 +214,14 @@ function Kiosk({ db, token, onExit }) {
         await fetchSOA(props[0]);
 
     } else {
+        // 🌟 Lock the word so typing doesn't change the screen until Enter is pressed
+        setSearchedTerm(cleanQ); 
+
         const tps = await db.select("taxpayers", { filter: `or=(lastname.ilike.*${cleanQ}*,firstname.ilike.*${cleanQ}*)`, select: "id" }, token);
         const tpIds = tps ? tps.map(t => t.id) : [];
 
-        const propsMatch = await db.select("properties", { filter: `property_index_no.ilike.*${cleanQ}*`, select: "id" }, token);
+        // 🌟 Upgraded to check BOTH PIN and TD Number
+        const propsMatch = await db.select("properties", { filter: `or=(property_index_no.ilike.*${cleanQ}*,td_number.ilike.*${cleanQ}*)`, select: "id" }, token);
         const propIds = propsMatch ? propsMatch.map(p => p.id) : [];
 
         let filterStr = `or=(or_number.ilike.*${cleanQ}*,paid_by.ilike.*${cleanQ}*`;
@@ -222,11 +229,10 @@ function Kiosk({ db, token, onExit }) {
         if (propIds.length > 0) filterStr += `,property_id.in.(${propIds.join(',')})`;
         filterStr += `)`;
 
-        // 🌟 NEW: Fetch the properties relation so we can get the PINs
         const collections = await db.select("collections", { filter: filterStr, select: "*, taxpayers(firstname, lastname), properties(property_index_no, td_number)" }, token);
 
         if (!collections || collections.length === 0) {
-          setError("Official Receipt, Payor, or PIN not found in the system.");
+          setError("Official Receipt, Payor, or Property not found in the system.");
           setLoading(false); return;
         }
 
@@ -235,7 +241,7 @@ function Kiosk({ db, token, onExit }) {
             acc[c.or_number] = {
               or_number: c.or_number, payment_date: c.payment_date, taxpayer: c.taxpayers, paid_by: c.paid_by,
               sum_total: 0, sum_basic: 0, sum_sef: 0, sum_penalty: 0, 
-              qSet: new Set(), pinSet: new Set() // 🌟 NEW: Track sets
+              qSet: new Set(), pinSet: new Set() 
             };
           }
           acc[c.or_number].sum_total += parseFloat(c.total_paid) || 0;
@@ -243,13 +249,11 @@ function Kiosk({ db, token, onExit }) {
           acc[c.or_number].sum_sef += parseFloat(c.sef_tax) || 0;
           acc[c.or_number].sum_penalty += parseFloat(c.penalty) || 0;
           
-          // 🌟 NEW: Format Quarters exactly as requested (e.g., 2000-Q1 or 2002)
           if (c.tax_year) {
             const qTag = (!c.quarter || c.quarter === "FULL") ? c.tax_year : `${c.tax_year}-${c.quarter}`;
             acc[c.or_number].qSet.add(qTag);
           }
           
-          // 🌟 NEW: Track PINs
           if (c.properties) {
             acc[c.or_number].pinSet.add(c.properties.property_index_no || c.properties.td_number || "—");
           }
@@ -257,7 +261,6 @@ function Kiosk({ db, token, onExit }) {
           return acc;
         }, {}));
 
-        // 🌟 NEW: Sort so the newest receipts are ALWAYS at the top!
         groupedORs.sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date));
 
         if (groupedORs.length > 1) {
@@ -405,7 +408,7 @@ return (
                         <div style={{fontSize: "14px", color: "#D4A017", fontWeight: "bold", marginTop: "4px"}}>Date Paid: {or.payment_date}</div>
                         <div style={{fontSize: "14px", color: "#64748b", marginTop: "4px"}}>Taxpayer: {or.taxpayer?.lastname}, {or.taxpayer?.firstname}</div>
                         {/* 🌟 FIXED: Shows exactly what they searched instead of listing all properties */}
-                        <div style={{fontSize: "13px", color: "#2563eb", marginTop: "4px", fontWeight: "bold"}}>Search Match: {q}</div>
+                        <div style={{fontSize: "13px", color: "#2563eb", marginTop: "4px", fontWeight: "bold"}}>Search Match: {searchedTerm}</div>
                         <div style={{fontSize: "15px", color: "#16a34a", fontWeight: "bold", marginTop: "6px"}}>Total Paid: ₱{fmt(or.sum_total)}</div>
                       </div>
                       <div style={{fontSize: "24px", color: "#D4A017", fontWeight: "bold"}}>→</div>
@@ -540,7 +543,7 @@ return (
                     {/* 🌟 FIXED: Shows the specific Name, PIN, or TD they searched for */}
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
                       <span style={{ color: "#64748b" }}>Verified Match:</span>
-                      <span style={{ fontWeight: "bold", color: "#1E3A5F", textAlign: "right", maxWidth: "60%" }}>{q}</span>
+                      <span style={{ fontWeight: "bold", color: "#1E3A5F", textAlign: "right", maxWidth: "60%" }}>{searchedTerm}</span>
                     </div>
 
                     {/* 🌟 NEW: Formatted Quarters */}
