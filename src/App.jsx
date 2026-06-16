@@ -1999,6 +1999,8 @@ function Collection({ token, profile }) {
   const [propList,setPropList] = useState([]);
   const [selProp,setSelProp] = useState(null);
   const [asmt,setAsmt]       = useState(null);
+  const [selectedProps, setSelectedProps] = useState([]);
+  const [multiPropData, setMultiPropData] = useState([]);
   const [asmtHistory, setAsmtHistory] = useState([]); 
   const [paidYears, setPaidYears] = useState([]);
   
@@ -2057,34 +2059,40 @@ function Collection({ token, profile }) {
     } catch(e){ setErr(e.message); }
   };
 
-  const pickProp = async p => {
+  const toggleProp = (p) => {
+    if (selectedProps.find(x => x.id === p.id)) {
+      setSelectedProps(selectedProps.filter(x => x.id !== p.id));
+    } else {
+      setSelectedProps([...selectedProps, p]);
+    }
+  };
+
+  const proceedWithSelected = async () => {
+    if (selectedProps.length === 0) return;
     setErr(""); 
     try {
-      setSelProp(p);
-      const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
-      setAsmtHistory(history || []); 
-      const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
-      const yearsPaid = payments ? payments.map(pay => parseInt(pay.tax_year)) : [];
-      setPaidYears(yearsPaid);
+      let globalMinYear = new Date().getFullYear();
+      let enrichedProps = [];
 
-      const currentYear = new Date().getFullYear();
-      
-      const delinqRecords = await db.select("delinquency", { filter: `property_id=eq.${p.id}&status=eq.UNPAID` }, token);
-      
-      let startingYear = currentYear; 
-      
-      if (delinqRecords && delinqRecords.length > 0) {
-        startingYear = Math.min(...delinqRecords.map(d => parseInt(d.tax_year)));
+      for (const p of selectedProps) {
+        const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
+        const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
+        const yearsPaid = payments ? payments.map(pay => parseInt(pay.tax_year)) : [];
+        const delinqRecords = await db.select("delinquency", { filter: `property_id=eq.${p.id}&status=eq.UNPAID` }, token);
+        
+        let startingYear = new Date().getFullYear(); 
+        if (delinqRecords && delinqRecords.length > 0) startingYear = Math.min(...delinqRecords.map(d => parseInt(d.tax_year)));
+        if (startingYear < globalMinYear) globalMinYear = startingYear;
+
+        enrichedProps.push({ prop: p, history: history || [], paidYears: yearsPaid });
       }
       
-      setFirstUnpaidYear(startingYear);
-      setFromYear(String(startingYear));
-      setToYear(String(Math.max(startingYear, currentYear))); 
-      
+      setMultiPropData(enrichedProps);
+      setFirstUnpaidYear(globalMinYear);
+      setFromYear(String(globalMinYear));
+      setToYear(String(Math.max(globalMinYear, new Date().getFullYear()))); 
       setStep(3);
-    } catch(e) {
-      setErr("Failed to load property: " + e.message);
-    }
+    } catch(e) { setErr("Failed to load property data: " + e.message); }
   };
 
   const payDateObj = new Date(paymentDate || today());
@@ -2095,88 +2103,84 @@ function Collection({ token, profile }) {
   let end = parseInt(toYear) || currentYear;
   if (start > end) { let temp = start; start = end; end = temp; }
 
-  let cart = [];
+  let displayCart = []; 
+  let dbCart = [];      
   let tBasic = 0, tSef = 0, tPen = 0, tDisc = 0, gTotal = 0;
 
   for (let y = start; y <= end; y++) {
-    if (paidYears.includes(y)) {
-      cart.push({ year: y, display: y, quarterTag: "FULL", isPaid: true, basic: 0, sef: 0, pen: 0, disc: 0, total: 0 });
-      continue; 
-    }
-
-    const activeAsmt = asmtHistory.find(a => parseInt(a.tax_year) <= y);
-    const basicTax = activeAsmt ? parseFloat(activeAsmt.basic_tax) : (selProp ? rd(parseFloat(selProp.assessed_value) * 0.01) : 0);
-    const sefTax   = activeAsmt ? parseFloat(activeAsmt.sef_tax)   : (selProp ? rd(parseFloat(selProp.assessed_value) * 0.01) : 0);
+    let yearBasic = 0, yearSef = 0, yearPen = 0, yearDisc = 0;
+    let allPaidThisYear = true;
     
-    let rowBasic = 0, rowSef = 0, rowPen = 0, rowDisc = 0;
     let startQ = (y === start) ? parseInt(fromQuarter) : 1;
     let endQ = (y === end) ? parseInt(toQuarter) : 4;
-    
     if (y === start && y === end && startQ > endQ) { let temp = startQ; startQ = endQ; endQ = temp; }
-
-    const qBaseBasic = rd(basicTax / 4);
-    const qBaseSef = rd(sefTax / 4);
-
-    const getQBasic = (q) => q === 4 ? rd(basicTax - (qBaseBasic * 3)) : qBaseBasic;
-    const getQSef   = (q) => q === 4 ? rd(sefTax - (qBaseSef * 3)) : qBaseSef;
-    const getQDue   = (q) => rd(getQBasic(q) + getQSef(q));
-
-    let quartersToPay = [];
-    for (let q = startQ; q <= endQ; q++) quartersToPay.push(q);
-
-    // 🌟 NEW DISCOUNT LOGIC 🌟
-    let rawDisc = 0;
-    let rawPen = 0;
-    
-    if (y > currentYear) {
-      quartersToPay.forEach(q => {
-        rowBasic += getQBasic(q);
-        rowSef += getQSef(q);
-        if (currentMonth <= 9) {
-            rawDisc += getQDue(q) * 0.15; 
-        } else {
-            rawDisc += getQDue(q) * 0.10; 
-        }
-      });
-    } else if (y < currentYear) {
-      const mosLate = ((currentYear - y) * 12) + currentMonth;
-      let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
-      
-      quartersToPay.forEach(q => {
-        rowBasic += getQBasic(q);
-        rowSef += getQSef(q);
-        rawPen += getQDue(q) * penaltyRate;
-      });
-    } else {
-      quartersToPay.forEach(q => {
-        rowBasic += getQBasic(q);
-        rowSef += getQSef(q);
-        const dueMo = q * 3;
-        if (currentMonth <= dueMo) {
-          // 🌟 Accumulate the raw fraction, do not round yet!
-          rawDisc += getQDue(q) * 0.10;
-        } else {
-          rawPen += getQDue(q) * Math.min(currentMonth * 0.02, 0.72);
-        }
-      });
-    }
-
-    // Apply the official rounding exactly ONE time at the end
-    rowBasic = rd(rowBasic);
-    rowSef = rd(rowSef);
-    rowPen = rd(rawPen);
-    rowDisc = rd(rawDisc);
-    const rowTot = rd(rowBasic + rowSef - rowDisc + rowPen);
     
     const qCount = (endQ - startQ) + 1;
     const qLabel = qCount === 4 ? "FULL" : (startQ === endQ ? `Q${startQ}` : `Q${startQ}-Q${endQ}`);
     const displayLabel = qCount === 4 ? y : `${y} (${qLabel})`;
 
-    cart.push({ 
-      year: y, display: displayLabel, quarterTag: qLabel, 
-      isPaid: false, basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot 
-    });
-    tBasic += rowBasic; tSef += rowSef; tPen += rowPen; tDisc += rowDisc; gTotal += rowTot;
+    let quartersToPay = [];
+    for (let q = startQ; q <= endQ; q++) quartersToPay.push(q);
+
+    for (const mp of multiPropData) {
+      if (mp.paidYears.includes(y)) continue; 
+      allPaidThisYear = false;
+
+      const activeAsmt = mp.history.find(a => parseInt(a.tax_year) <= y);
+      const basicTax = activeAsmt ? parseFloat(activeAsmt.basic_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
+      const sefTax   = activeAsmt ? parseFloat(activeAsmt.sef_tax)   : rd(parseFloat(mp.prop.assessed_value) * 0.01);
+
+      const qBaseBasic = rd(basicTax / 4);
+      const qBaseSef = rd(sefTax / 4);
+      const getQBasic = (q) => q === 4 ? rd(basicTax - (qBaseBasic * 3)) : qBaseBasic;
+      const getQSef   = (q) => q === 4 ? rd(sefTax - (qBaseSef * 3)) : qBaseSef;
+      const getQDue   = (q) => rd(getQBasic(q) + getQSef(q));
+
+      let rowBasic = 0, rowSef = 0;
+      
+      // 🌟 YOUR EXACT FIXED DISCOUNT LOGIC 🌟
+      let rawDisc = 0;
+      let rawPen = 0;
+      
+      if (y > currentYear) {
+        quartersToPay.forEach(q => {
+          rowBasic += getQBasic(q); rowSef += getQSef(q);
+          if (currentMonth <= 9) rawDisc += getQDue(q) * 0.15; 
+          else rawDisc += getQDue(q) * 0.10; 
+        });
+      } else if (y < currentYear) {
+        const mosLate = ((currentYear - y) * 12) + currentMonth;
+        let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
+        quartersToPay.forEach(q => {
+          rowBasic += getQBasic(q); rowSef += getQSef(q);
+          rawPen += getQDue(q) * penaltyRate;
+        });
+      } else {
+        quartersToPay.forEach(q => {
+          rowBasic += getQBasic(q); rowSef += getQSef(q);
+          const dueMo = q * 3;
+          if (currentMonth <= dueMo) rawDisc += getQDue(q) * 0.10;
+          else rawPen += getQDue(q) * Math.min(currentMonth * 0.02, 0.72);
+        });
+      }
+
+      rowBasic = rd(rowBasic); rowSef = rd(rowSef);
+      let rowPen = rd(rawPen); let rowDisc = rd(rawDisc);
+      const rowTot = rd(rowBasic + rowSef - rowDisc + rowPen);
+
+      yearBasic += rowBasic; yearSef += rowSef; yearPen += rowPen; yearDisc += rowDisc;
+
+      dbCart.push({ property_id: mp.prop.id, assessment_id: activeAsmt?.id, year: y, quarterTag: qLabel, basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot });
+    }
+
+    if (allPaidThisYear) {
+      displayCart.push({ year: y, display: displayLabel, isPaid: true });
+    } else {
+      yearBasic = rd(yearBasic); yearSef = rd(yearSef); yearPen = rd(yearPen); yearDisc = rd(yearDisc);
+      const yearTot = rd(yearBasic + yearSef - yearDisc + yearPen);
+      displayCart.push({ year: y, display: displayLabel, isPaid: false, basic: yearBasic, sef: yearSef, pen: yearPen, disc: yearDisc, total: yearTot });
+      tBasic += yearBasic; tSef += yearSef; tPen += yearPen; tDisc += yearDisc; gTotal += yearTot;
+    }
   }
 
   gTotal = rd(gTotal);
@@ -2191,14 +2195,13 @@ function Collection({ token, profile }) {
     try {
       const mainOr = orNumber.trim(); 
       
-      const rowsToInsert = cart.map((item) => ({
+      const rowsToInsert = dbCart.map((item) => ({
         or_number: mainOr, 
-        taxpayer_id: found.id, property_id: selProp?.id,
-        assessment_id: asmt?.id, tax_year: item.year,
-        
-        // 🌟 CHANGED: today() is now paymentDate
+        taxpayer_id: found.id, 
+        property_id: item.property_id,
+        assessment_id: item.assessment_id, 
+        tax_year: item.year,
         payment_date: paymentDate, 
-        
         payment_method: method, 
         quarter: item.quarterTag,
         basic_tax: item.basic, sef_tax: item.sef, idle_tax: 0,
@@ -2212,22 +2215,19 @@ function Collection({ token, profile }) {
       
       await db.insert("official_receipts",{or_number:mainOr, collection_id:col.id, printed_by:profile?.id, print_count:0},token);
       
-      for (const item of cart) {
-        if (!item.isPaid) {
-          try {
-            await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${selProp.id}&tax_year=eq.${item.year}` }, token);
-          } catch (updateErr) {}
-        }
+      for (const item of dbCart) {
+        try {
+          await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${item.property_id}&tax_year=eq.${item.year}` }, token);
+        } catch (updateErr) {}
       }
       
-      // 🌟 CHANGED: Also added payment_date to the issued receipt object here
-      setIssued({...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, property:selProp, cashier:profile?.full_name});
+      setIssued({...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer:found, properties:selectedProps, cashier:profile?.full_name});
       setStep(4);
     } catch(e){ setErr(e.message); }
     setPosting(false);
   };
 
-  const reset = () => { setStep(1);setFound(null);setPropList([]);setSelProp(null);setAsmt(null);setIssued(null);setQ("");setErr("");setOrNumber(""); };
+  const reset = () => { setStep(1);setFound(null);setPropList([]);setSelProp(null);setAsmt(null);setIssued(null);setQ("");setErr("");setOrNumber("");setSelectedProps([]); setMultiPropData([]); };
 
   if (step===4 && issued) return (
     <>
@@ -2342,20 +2342,22 @@ function Collection({ token, profile }) {
             </div>
             <div className="panel-title" style={{marginBottom:12,paddingBottom:0}}>Select Property</div>
             {propList.length===0
-              ? <div className="empty"><div className="empty-icon">🏠</div><div className="empty-text">No properties on record for this taxpayer</div></div>
+              ? <div className="empty"><div className="empty-icon">🏠</div><div className="empty-text">No properties on record</div></div>
               : propList.map(p=>(
-                  <div className="prop-card" key={p.id} onClick={()=>pickProp(p)}>
+                  <div className="prop-card" key={p.id} onClick={()=>toggleProp(p)} style={{ border: selectedProps.find(x => x.id === p.id) ? "2px solid var(--blue2)" : "1px solid var(--border)" }}>
                     <div className="prop-card-left">
                       <h3>{p.td_number}  <span className="badge badge-blue">{p.classification}</span></h3>
-                      <p style={{marginTop: "4px", fontWeight: "bold", color: "var(--blue2)"}}>PIN: {p.property_index_no || "—"}  |  🗄️ LOCATOR: {p.container_code || "—"}</p>
+                      <p style={{marginTop: "4px", fontWeight: "bold", color: "var(--blue2)"}}>PIN: {p.property_index_no || "—"}</p>
                       <p>AV: {fmt(p.assessed_value)} · {p.barangay||"—"}</p>
                     </div>
-                    <button className="btn btn-primary btn-sm">Select →</button>
+                    <div><input type="checkbox" checked={!!selectedProps.find(x => x.id === p.id)} readOnly style={{width: 22, height: 22, cursor: "pointer"}} /></div>
                   </div>
                 ))
             }
-            <button className="btn btn-ghost btn-sm" style={{marginTop:8}} onClick={()=>setStep(1)}>← Back</button>
-          </div>
+            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16}}>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setStep(1)}>← Back</button>
+              {propList.length > 0 && <button className="btn btn-primary" onClick={proceedWithSelected} disabled={selectedProps.length === 0}>Compute Selected ({selectedProps.length}) →</button>}
+            </div>
         )}
 
         {step===3 && selProp && (
@@ -2370,11 +2372,20 @@ function Collection({ token, profile }) {
               )}
 
               <div className="panel">
-                <div className="panel-title">Property Details</div>
-                <div className="detail-grid">
-                  {[["TD No.",selProp.td_number],["Classification",selProp.classification],["Market Value",fmt(selProp.market_value)],["Asmt. Level",(parseFloat(selProp.assessment_level)*100).toFixed(0)+"%"],["Assessed Value",fmt(selProp.assessed_value)]].map(([k,v])=>(
-                    <div className="drow" key={k}><span className="dk">{k}</span><span className="dv">{v}</span></div>
-                  ))}
+                <div className="panel-title">Selected Properties ({selectedProps.length})</div>
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>TD No.</th><th>Classification</th><th style={{textAlign: "right"}}>Assessed Value</th></tr></thead>
+                    <tbody>
+                      {selectedProps.map(p => (
+                        <tr key={p.id}>
+                          <td style={{fontWeight: "bold"}}>{p.td_number}</td>
+                          <td>{p.classification}</td>
+                          <td style={{textAlign: "right", fontFamily: "monospace"}}>{fmt(p.assessed_value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
               <div className="panel">
@@ -2471,7 +2482,7 @@ function Collection({ token, profile }) {
                   <table style={{fontSize: 11}}>
                     <thead><tr><th>Year</th><th>Basic</th><th>SEF</th><th>Pen/Disc</th><th>Total</th></tr></thead>
                     <tbody>
-                      {cart.map(c => (
+                      {displayCart.map(c => (
                         <tr key={c.year} style={c.isPaid ? { backgroundColor: "var(--bg2)", opacity: 0.7 } : {}}>
                         <td><span className="chip">{c.display}</span></td>
                           
