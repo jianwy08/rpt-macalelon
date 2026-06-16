@@ -2522,7 +2522,8 @@ function Delinquency({ token, profile }) {
   const [showAdd,setShowAdd]   = useState(false);
   const [saving,setSaving]     = useState(false);
   const [deleting,setDeleting] = useState(false); 
-  const [recalculating, setRecalculating] = useState(false); 
+  const [recalculating, setRecalculating] = useState(false);
+  const [generating, setGenerating] = useState(false); 
   const [allProps,setAllProps] = useState([]);
   const [asmtHistory, setAsmtHistory] = useState([]); 
   const [paidCollections, setPaidCollections] = useState([]); 
@@ -2587,6 +2588,72 @@ function Delinquency({ token, profile }) {
   },[token, q]);
 
   useEffect(()=>{ load(); },[load]);
+
+  const handleGenerateReceivables = async () => {
+    // Ask the Treasurer which year they are generating
+    const suggestedYear = new Date().getFullYear();
+    const inputYear = window.prompt("Enter the Tax Year you want to generate receivables for (e.g., 2026 or 2027):", suggestedYear);
+    if (!inputYear) return;
+    
+    const targetYear = parseInt(inputYear);
+    if (isNaN(targetYear) || targetYear < 2000 || targetYear > 2100) {
+      alert("Please enter a valid year.");
+      return;
+    }
+
+    if (!window.confirm(`⚠️ WARNING: Are you sure you want to mass-generate unpaid records for ALL active properties for the year ${targetYear}? This might take a few moments.`)) return;
+
+    setGenerating(true);
+    try {
+      // 1. Fetch all properties with their assessed value (limit 50,000)
+      const props = await db.select("properties", { select: "id, taxpayer_id, assessed_value", limit: 50000 }, token);
+      
+      // 2. Fetch existing delinquency records for the target year to avoid duplicates
+      const existing = await db.select("delinquency", { filter: `tax_year=eq.${targetYear}`, select: "property_id", limit: 50000 }, token);
+      const existingIds = new Set(existing.map(e => e.property_id));
+
+      // 3. Filter out properties that already have a record for this year
+      const toInsert = props.filter(p => !existingIds.has(p.id));
+
+      if (toInsert.length === 0) {
+        alert(`All properties have already been billed for ${targetYear}!`);
+        setGenerating(false);
+        return;
+      }
+
+      // 4. Process in chunks of 500 to protect the Supabase API limits
+      const chunkSize = 500;
+      let insertedCount = 0;
+
+      for (let i = 0; i < toInsert.length; i += chunkSize) {
+        const chunk = toInsert.slice(i, i + chunkSize).map(p => {
+          const av = parseFloat(p.assessed_value) || 0;
+          const tax = rd(av * 0.01); // 1% Basic, 1% SEF
+          
+          return {
+            property_id: p.id,
+            taxpayer_id: p.taxpayer_id,
+            tax_year: targetYear,
+            unpaid_basic: tax,
+            unpaid_sef: tax,
+            months_delinquent: 0,
+            interest_amount: 0,
+            total_due: rd(tax + tax),
+            status: "UNPAID"
+          };
+        });
+
+        await db.insert("delinquency", chunk, token);
+        insertedCount += chunk.length;
+      }
+
+      alert(`✅ Success! Generated new ${targetYear} receivables for ${insertedCount} properties.`);
+      load(); // Refresh the table
+    } catch (e) {
+      alert("Failed to generate receivables: " + e.message);
+    }
+    setGenerating(false);
+  };
 
   const loadProps = async () => {
     // 🌟 Increased limit to 50,000 so NO properties are left behind
@@ -3406,9 +3473,16 @@ function Delinquency({ token, profile }) {
                 🖨️ Mass Print SOAs
               </button>
               {["admin", "treasurer"].includes(profile?.role) && (
-                <button className="btn btn-gold btn-sm" onClick={handleBatchRecalculate} disabled={recalculating || filteredGroupedList.length === 0}>
-                  {recalculating ? "..." : "🔄 Batch Recalculate"}
-                </button>
+                <>
+                  <button className="btn btn-gold btn-sm" onClick={handleBatchRecalculate} disabled={recalculating || filteredGroupedList.length === 0}>
+                    {recalculating ? "..." : "🔄 Batch Recalculate"}
+                  </button>
+                  
+                  {/* 🌟 NEW: The Year-End Rollover Button */}
+                  <button className="btn btn-danger btn-sm" onClick={handleGenerateReceivables} disabled={generating || recalculating}>
+                    {generating ? "Generating..." : "📅 Generate Receivables"}
+                  </button>
+                </>
               )}
             </div>
           </div>
