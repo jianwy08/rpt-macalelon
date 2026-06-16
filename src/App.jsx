@@ -2125,14 +2125,17 @@ function Collection({ token, profile }) {
     for (let q = startQ; q <= endQ; q++) quartersToPay.push(q);
 
     // 🌟 NEW DISCOUNT LOGIC 🌟
+    let rawDisc = 0;
+    let rawPen = 0;
+    
     if (y > currentYear) {
       quartersToPay.forEach(q => {
         rowBasic += getQBasic(q);
         rowSef += getQSef(q);
         if (currentMonth <= 9) {
-            rowDisc += rd(getQDue(q) * 0.15); 
+            rawDisc += getQDue(q) * 0.15; 
         } else {
-            rowDisc += rd(getQDue(q) * 0.10); 
+            rawDisc += getQDue(q) * 0.10; 
         }
       });
     } else if (y < currentYear) {
@@ -2142,7 +2145,7 @@ function Collection({ token, profile }) {
       quartersToPay.forEach(q => {
         rowBasic += getQBasic(q);
         rowSef += getQSef(q);
-        rowPen += rd(getQDue(q) * penaltyRate);
+        rawPen += getQDue(q) * penaltyRate;
       });
     } else {
       quartersToPay.forEach(q => {
@@ -2150,18 +2153,19 @@ function Collection({ token, profile }) {
         rowSef += getQSef(q);
         const dueMo = q * 3;
         if (currentMonth <= dueMo) {
-          // 🌟 Current year on-time payments ALWAYS get 10%
-          rowDisc += rd(getQDue(q) * 0.10);
+          // 🌟 Accumulate the raw fraction, do not round yet!
+          rawDisc += getQDue(q) * 0.10;
         } else {
-          rowPen += rd(getQDue(q) * Math.min(currentMonth * 0.02, 0.72));
+          rawPen += getQDue(q) * Math.min(currentMonth * 0.02, 0.72);
         }
       });
     }
 
+    // Apply the official rounding exactly ONE time at the end
     rowBasic = rd(rowBasic);
     rowSef = rd(rowSef);
-    rowPen = rd(rowPen);
-    rowDisc = rd(rowDisc);
+    rowPen = rd(rawPen);
+    rowDisc = rd(rawDisc);
     const rowTot = rd(rowBasic + rowSef - rowDisc + rowPen);
     
     const qCount = (endQ - startQ) + 1;
