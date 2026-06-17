@@ -713,7 +713,6 @@ function Login({ onLogin, onOpenKiosk }) {
     if (mode === "reset" && !pass) { setErr("Please enter a new password."); return; }
     if (mode !== "reset" && !email) { setErr("Email is required."); return; }
     if (mode === "login" && !pass) { setErr("Password is required."); return; }
-    if (mode === "register" && !name) { setErr("Full Name is required."); return; }
     
     setLoading(true); 
     try {
@@ -721,19 +720,6 @@ function Login({ onLogin, onOpenKiosk }) {
         const data = await db.authSignIn(email, pass);
         const profiles = await db.select("user_profiles", { filter:`id=eq.${data.user.id}` }, data.access_token);
         onLogin({ token: data.access_token, user: data.user, profile: profiles[0] || { full_name: email, role: "cashier" } });
-      
-      } else if (mode === "register") {
-        const existingName = await db.select("user_profiles", { filter: `full_name=ilike.${name}` });
-        if (existingName && existingName.length > 0) {
-          throw new Error("An account with this Full Name already exists.");
-        }
-        const data = await db.authSignUp(email, pass);
-        if (data.user) {
-          await db.insert("user_profiles", { id: data.user.id, full_name: name, role }, data.access_token || SUPA_KEY);
-          await logAudit(data.access_token || SUPA_KEY, data.user.id, name, `New user registered: ${name}`, "AUTH");
-          setMode("login"); 
-          alert("Account created! Please sign in.");
-        }
       
       } else if (mode === "forgot") {
         const currentUrl = encodeURIComponent(window.location.origin + "/");
@@ -779,20 +765,6 @@ function Login({ onLogin, onOpenKiosk }) {
         {msg && <div className="banner banner-success"><span className="banner-icon">✓</span>{msg}</div>}
 
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          {mode === "register" && <>
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. VILLANUEVA, MARIA TERESA"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Role</label>
-              <select value={role} onChange={e=>setRole(e.target.value)}>
-                {["cashier","assessor","encoder","accountant","auditor","treasurer","admin"].map(r=>(
-                  <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>
-                ))}
-              </select>
-            </div>
-          </>}
           
           {mode !== "reset" && !showManual && (
             <div className="form-group">
@@ -826,30 +798,35 @@ function Login({ onLogin, onOpenKiosk }) {
 
           {!showManual && (
             <button className="btn btn-gold" style={{marginTop:4,width:"100%",justifyContent:"center",padding:"12px"}} onClick={submit} disabled={loading}>
-              {loading ? <><span className="spin"/>&nbsp;Processing…</> : mode==="login"?"Sign In →": mode==="register"?"Create Account →" : mode==="reset"?"Save New Password" : "Send Reset Link ✉️"}
+             {loading ? <><span className="spin"/>&nbsp;Processing…</> : mode==="login"?"Sign In →" : mode==="reset"?"Save New Password" : "Send Reset Link ✉️"} 
             </button>
           )}
         </div>
 
-        <div className="login-divider">
-          <span>{mode==="login"?"New to the system?": mode==="forgot" ? "Remember your password?" : mode==="reset" ? "Changed your mind?" : "Already registered?"}</span>
-        </div>
-        
-        <div style={{display: "flex", flexDirection: "column", gap: "8px", alignItems: "center"}}>
-          <button className="btn btn-ghost btn-sm" onClick={()=>{
-            setMode(mode==="login"?"register":"login"); 
-            setErr(""); setMsg(""); setShowManual(false);
-            window.location.hash = ""; 
-          }}>
-            {mode==="login"?"Create an account":"Back to sign in"}
-          </button>
+        {mode !== "login" && (
+          <>
+            <div className="login-divider">
+              <span>{mode==="forgot" ? "Remember your password?" : "Changed your mind?"}</span>
+            </div>
+            <div style={{display: "flex", flexDirection: "column", gap: "8px", alignItems: "center", marginBottom: "16px"}}>
+              <button className="btn btn-ghost btn-sm" onClick={()=>{
+                setMode("login"); 
+                setErr(""); setMsg(""); setShowManual(false);
+                window.location.hash = ""; 
+              }}>
+                Back to sign in
+              </button>
+            </div>
+          </>
+        )}
 
-          {mode === "login" && !showManual && (
-            <span style={{fontSize: 10, color: "var(--text3)", cursor: "pointer", textDecoration: "underline"}} onClick={() => setShowManual(true)}>
+        {mode === "login" && !showManual && (
+          <div style={{display: "flex", justifyContent: "center", marginTop: "16px"}}>
+            <span style={{fontSize: 11, color: "var(--text3)", cursor: "pointer", textDecoration: "underline"}} onClick={() => setShowManual(true)}>
               Have a recovery link? Paste it here.
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* 🌟 NEW: KIOSK BUTTON FOR PUBLIC */}
         <div style={{ marginTop: "24px", borderTop: "1px solid var(--border)", paddingTop: "16px", textAlign: "center" }}>
@@ -2095,7 +2072,7 @@ function Collection({ token, profile }) {
         const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
         
         // 🌟 Map exact quarters paid
-        let paidQs = {};
+        let paidQs = {}
         if (payments) {
           payments.forEach(pay => {
             const y = parseInt(pay.tax_year);
