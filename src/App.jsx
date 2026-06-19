@@ -2210,19 +2210,25 @@ function Collection({ token, profile }) {
     try {
       const mainOr = orNumber.trim(); 
       
+     // 🌟 FIXED: Forced null and 0 values to prevent PGRST102 key errors!
       const rowsToInsert = dbCart.map((item) => ({
         or_number: mainOr, 
         taxpayer_id: found.id, 
         property_id: item.property_id,
-        assessment_id: item.assessment_id, 
+        assessment_id: item.assessment_id || null, 
         tax_year: item.year,
         payment_date: paymentDate, 
         payment_method: method, 
-        quarter: item.quarterTag,
-        basic_tax: item.basic, sef_tax: item.sef, idle_tax: 0,
-        penalty: item.pen, discount: item.disc, total_paid: item.total,
-        cashier_id: profile?.id, check_no: checkNo || null,
-        paid_by: paidBy.toUpperCase(), 
+        quarter: item.quarterTag || "FULL",
+        basic_tax: item.basic || 0, 
+        sef_tax: item.sef || 0, 
+        idle_tax: 0,
+        penalty: item.pen || 0, 
+        discount: item.disc || 0, 
+        total_paid: item.total || 0,
+        cashier_id: profile?.id || null, 
+        check_no: checkNo || null,
+        paid_by: paidBy ? paidBy.toUpperCase() : "UNKNOWN", 
       }));
 
       const insertedRows = await db.insert("collections", rowsToInsert, token);
