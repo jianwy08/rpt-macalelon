@@ -4,6 +4,28 @@ import { createClient } from '@supabase/supabase-js';
 export const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
 export const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const supabase = createClient(SUPA_URL, SUPA_KEY);
+export const amountToWords = (amount) => {
+    const num = parseFloat(amount || 0).toFixed(2).split('.');
+    const pesos = parseInt(num[0]);
+    const centavos = num[1];
+
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    const convertHundreds = (n) => {
+        if (n < 20) return ones[n];
+        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? '-' + ones[n % 10] : '');
+        return ones[Math.floor(n / 100)] + ' Hundred ' + convertHundreds(n % 100);
+    };
+
+    let words = '';
+    if (pesos >= 1000) {
+        words += convertHundreds(Math.floor(pesos / 1000)) + ' Thousand ';
+    }
+    words += convertHundreds(pesos % 1000) + ' Pesos';
+
+    return `${words} and ${centavos}/100`.replace(/\s+/g, ' ');
+};
 
 console.log("My Supabase URL is:", SUPA_URL);
 
