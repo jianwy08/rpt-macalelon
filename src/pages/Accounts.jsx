@@ -74,27 +74,26 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // 🌟 THE REAL FIX: This sends a request to your secure backend API
-    // which has master permissions to change the actual login password.
+    // 🌟 THIS IS THE BRIDGE: It sends the new password to your newly deployed Edge Function
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}` // Tells the system you are the Super Admin
+        "Authorization": `Bearer ${token}` 
       },
       body: JSON.stringify({
-        userId: selectedUser.id,   // The ID of the cashier/encoder
-        password: newPassword.trim(), // The real new password
-        action: "update_password"  // Tells the backend to change password instead of creating a user
+        userId: selectedUser.id,   
+        password: newPassword.trim(), 
+        action: "update_password"  
       })
     });
 
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Failed to update password.");
 
-    setMsg(`Password for ${selectedUser.full_name} has been updated in the system successfully!`);
+    setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
     setSelectedUser(null);
-    newPassword("");
+    setNewPassword("");
   } catch (e) {
     setErr(e.message || "Failed to update password.");
   } finally {
