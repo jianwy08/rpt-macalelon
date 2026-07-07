@@ -67,40 +67,33 @@ export default function Accounts({ token }) {
     }
   };
 
-  // 🌟 NEW: Handles password updates via your backend configuration
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setErr(""); setMsg("");
-    if (newPassword.length < 6) { setErr("Password must be at least 6 characters."); return; }
+ // 🌟 Update this function inside your Accounts.jsx file
+const handleChangePassword = async (e) => {
+  e.preventDefault();
+  setErr(""); setMsg("");
+  if (newPassword.length < 6) { setErr("Password must be at least 6 characters."); return; }
 
-    setPasswordLoading(true);
-    try {
-      // Re-uses your secure admin service endpoint to pass target structural changes safely
-      const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          userId: selectedUser.id, // Direct ID verification target
-          password: newPassword.trim(),
-          action: "update_password" // Flag processed on your Edge function architecture
-        })
-      });
+  setPasswordLoading(true);
+  try {
+    // Direct client-side update for the user profile row
+    const { error } = await db.update(
+      "user_profiles", 
+      { temp_password: newPassword.trim(), require_password_reset: true }, 
+      { filter: `id=eq.${selectedUser.id}` }, 
+      token
+    );
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Failed to update password.");
+    if (error) throw error;
 
-      setMsg(`Password for ${selectedUser.full_name} updated successfully!`);
-      setSelectedUser(null);
-      setNewPassword("");
-    } catch (e) {
-      setErr(e.message || "Failed to update password.");
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
+    setMsg(`Temporary password for ${selectedUser.full_name} set to database successfully!`);
+    setSelectedUser(null);
+    setNewPassword("");
+  } catch (e) {
+    setErr(e.message || "Failed to update password.");
+  } finally {
+    setPasswordLoading(false);
+  }
+};
 
   return (
     <div style={{ padding: "30px", maxWidth: "1000px", margin: "0 auto", animation: "fadeIn 0.4s" }}>
