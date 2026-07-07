@@ -67,27 +67,34 @@ export default function Accounts({ token }) {
     }
   };
 
- // 🌟 Update this function inside your Accounts.jsx file
-const handleChangePassword = async (e) => {
+ const handleChangePassword = async (e) => {
   e.preventDefault();
   setErr(""); setMsg("");
   if (newPassword.length < 6) { setErr("Password must be at least 6 characters."); return; }
 
   setPasswordLoading(true);
   try {
-    // Direct client-side update for the user profile row
-    const { error } = await db.update(
-      "user_profiles", 
-      { temp_password: newPassword.trim(), require_password_reset: true }, 
-      { filter: `id=eq.${selectedUser.id}` }, 
-      token
-    );
+    // 🌟 THE REAL FIX: This sends a request to your secure backend API
+    // which has master permissions to change the actual login password.
+    const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}` // Tells the system you are the Super Admin
+      },
+      body: JSON.stringify({
+        userId: selectedUser.id,   // The ID of the cashier/encoder
+        password: newPassword.trim(), // The real new password
+        action: "update_password"  // Tells the backend to change password instead of creating a user
+      })
+    });
 
-    if (error) throw error;
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Failed to update password.");
 
-    setMsg(`Temporary password for ${selectedUser.full_name} set to database successfully!`);
+    setMsg(`Password for ${selectedUser.full_name} has been updated in the system successfully!`);
     setSelectedUser(null);
-    setNewPassword("");
+    newPassword("");
   } catch (e) {
     setErr(e.message || "Failed to update password.");
   } finally {
