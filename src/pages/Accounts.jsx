@@ -9,35 +9,36 @@ export default function Accounts({ token }) {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
-  // ✅ New Code (Wrapped in useCallback)
-const loadUsers = useCallback(async () => {
-  setLoading(true);
-  try {
-    const data = await db.select("user_profiles", { select: "*" }, token);
-    setUsers(data || []);
-  } catch (e) {
-    console.error(e);
-  }
-  setLoading(false);
-}, [token]); 
-// ^ Notice the added dependency array at the end!
+  // 🌟 NEW: States for the Change Password modal interface
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
- // ✅ Fix: Tell the linter to ignore this specific line
-useEffect(() => {
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await db.select("user_profiles", { select: "*" }, token);
+      setUsers(data || []);
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => {
     // eslint-disable-next-line
     loadUsers();
-}, [loadUsers]);
+  }, [loadUsers]);
 
   const handleAdd = async (e) => {
     e.preventDefault();
     setErr(""); setMsg("");
     try {
-      // 🌟 FIXED: We send this to the secure Edge Function so the Super Admin doesn't get logged out!
       const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}` // Proves you are the Super Admin
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
           email: form.email,
@@ -48,13 +49,9 @@ useEffect(() => {
       });
 
       const result = await response.json();
-
-      // If the Edge Function rejected us, throw the error so it shows on screen
       if (!response.ok) throw new Error(result.error || "Failed to create account.");
 
-      // If we succeed, we can optionally update the position directly from the frontend
       if (form.position && result.success) {
-        // The Edge function handles the ID, but we can do a quick patch for the position
         const newUsers = await db.select("user_profiles", { filter: `full_name=eq.${form.full_name}` }, token);
         if (newUsers && newUsers.length > 0) {
           await db.update("user_profiles", { position: form.position }, { filter: `id=eq.${newUsers[0].id}` }, token);
@@ -67,6 +64,41 @@ useEffect(() => {
       loadUsers();
     } catch (e) {
       setErr(e.message || "Failed to create account.");
+    }
+  };
+
+  // 🌟 NEW: Handles password updates via your backend configuration
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setErr(""); setMsg("");
+    if (newPassword.length < 6) { setErr("Password must be at least 6 characters."); return; }
+
+    setPasswordLoading(true);
+    try {
+      // Re-uses your secure admin service endpoint to pass target structural changes safely
+      const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id, // Direct ID verification target
+          password: newPassword.trim(),
+          action: "update_password" // Flag processed on your Edge function architecture
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to update password.");
+
+      setMsg(`Password for ${selectedUser.full_name} updated successfully!`);
+      setSelectedUser(null);
+      setNewPassword("");
+    } catch (e) {
+      setErr(e.message || "Failed to update password.");
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -121,6 +153,23 @@ useEffect(() => {
         </div>
       )}
 
+      {/* 🌟 NEW: Change Password Modal / Section */}
+      {selectedUser && (
+        <div style={{ background: "var(--card-bg)", padding: "20px", borderRadius: "12px", marginBottom: "30px", border: "2px solid var(--gold)" }}>
+          <h3 style={{ margin: "0 0 15px 0", fontSize: "18px", color: "white" }}>Change Password for: <span style={{ color: "var(--gold)" }}>{selectedUser.full_name}</span></h3>
+          <form onSubmit={handleChangePassword} style={{ display: "flex", gap: "15px", alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: "12px", marginBottom: "5px", color: "var(--text-muted)" }}>New Secure Password</label>
+              <input required type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="input" placeholder="Minimum 6 characters" minLength="6" />
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button type="submit" className="btn btn-primary" disabled={passwordLoading || !newPassword}>Update Password</button>
+              <button type="button" className="btn btn-outline" onClick={() => { setSelectedUser(null); setNewPassword(""); }}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ textAlign: "center", padding: "50px", opacity: 0.5 }}>Loading accounts...</div>
       ) : (
@@ -131,6 +180,7 @@ useEffect(() => {
                 <th style={{ padding: "12px" }}>Name</th>
                 <th style={{ padding: "12px" }}>Role</th>
                 <th style={{ padding: "12px" }}>Position</th>
+                <th style={{ padding: "12px", textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -141,9 +191,19 @@ useEffect(() => {
                     <span style={{ fontSize: "10px", background: "rgba(255,255,255,0.1)", padding: "4px 8px", borderRadius: "12px", textTransform: "uppercase" }}>{u.role}</span>
                   </td>
                   <td style={{ padding: "12px", color: "var(--text-muted)" }}>{u.position || "—"}</td>
+                  {/* 🌟 NEW: Action interactive cell linking password modifications */}
+                  <td style={{ padding: "12px", textAlign: "right" }}>
+                    <button 
+                      className="btn btn-sm btn-outline" 
+                      style={{ fontSize: "11px", padding: "4px 10px" }}
+                      onClick={() => { setSelectedUser(u); setErr(""); setMsg(""); }}
+                    >
+                      🔑 Change Password
+                    </button>
+                  </td>
                 </tr>
               ))}
-              {users.length === 0 && <tr><td colSpan="3" style={{ textAlign: "center", padding: "30px", opacity: 0.5 }}>No profiles found.</td></tr>}
+              {users.length === 0 && <tr><td colSpan="4" style={{ textAlign: "center", padding: "30px", opacity: 0.5 }}>No profiles found.</td></tr>}
             </tbody>
           </table>
         </div>
