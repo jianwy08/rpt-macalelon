@@ -78,8 +78,14 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // This automatically grabs that long string without you hardcoding it!
+    // 🌟 THE SECURE WAY: Grabbing the key from Vercel's environment variables
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
+
+    // Safety check: This will instantly tell you in the browser console if Vercel failed to load the key
+    if (!anonKey) {
+       console.error("Vercel did not load the Anon Key!");
+       throw new Error("System configuration error. Please contact support.");
+    }
 
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
