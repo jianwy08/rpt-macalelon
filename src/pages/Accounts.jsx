@@ -49,7 +49,8 @@ const handleAdd = async (e) => {
           password: form.pass,
           fullName: form.full_name,
           role: form.role,
-          action: "create_user" // 🌟 THIS is where this goes!
+          position: form.position, // 🌟 ADD THIS LINE
+          action: "create_user" 
         })
       });
 

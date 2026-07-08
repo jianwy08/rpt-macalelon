@@ -12,20 +12,15 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log("🚀 Edge Function triggered!");
-    
     const body = await req.json();
-    console.log("📦 Received payload:", body);
     
-    // 🌟 We make sure to grab ALL the variables you might send
-    const { userId, password, action, email, fullName, role } = body;
+    // 🌟 We grab the position from the frontend now
+    const { userId, password, action, email, fullName, role, position } = body;
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    if (!serviceRoleKey) {
-        throw new Error("Missing Service Role Key.");
-    }
+    if (!serviceRoleKey) throw new Error("Missing Service Role Key.");
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
@@ -33,12 +28,9 @@ Deno.serve(async (req) => {
     // LOGIC 1: UPDATE PASSWORD
     // ==========================================
     if (action === 'update_password') {
-      console.log(`🔐 Attempting to update password for user ID: ${userId}`);
       const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
-      
       if (error) throw error;
       
-      console.log("✅ Password updated successfully!");
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -46,38 +38,56 @@ Deno.serve(async (req) => {
     }
 
     // ==========================================
-    // LOGIC 2: CREATE NEW ACCOUNT
+    // LOGIC 2: CREATE NEW ACCOUNT & PROFILE
     // ==========================================
     if (action === 'create_user') {
-      console.log(`👤 Attempting to create new auth user for: ${email}`);
-      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      console.log(`👤 Creating auth account for: ${email}`);
+      
+      // 1. Create the secure login account
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
         password: password,
         email_confirm: true,
-        user_metadata: { 
-          full_name: fullName, 
-          role: role || 'client' 
-        }
+        user_metadata: { full_name: fullName, role: role }
       });
       
-      if (error) throw error;
+      if (authError) throw authError;
+
+      const newUserId = authData.user.id;
+      console.log(`✅ Auth account created. ID: ${newUserId}. Inserting profile...`);
+
+      // 2. 🌟 Insert them into your public user_profiles table using the new ID!
+      const { error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .insert([
+          {
+            id: newUserId,
+            full_name: fullName,
+            role: role || 'cashier',
+            position: position || null,
+            is_active: true
+          }
+        ]);
+
+      if (profileError) {
+         console.error("❌ Profile Insert Error:", profileError);
+         throw profileError;
+      }
       
-      console.log("✅ User successfully created in Auth table! ID:", data.user.id);
-      return new Response(JSON.stringify({ success: true, user: data.user }), {
+      console.log("✅ Profile successfully added to user_profiles table!");
+      return new Response(JSON.stringify({ success: true, user: authData.user }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
     }
 
-    // If it reaches here, no valid action was sent
-    console.log("⚠️ No valid action provided in payload.");
     return new Response(JSON.stringify({ success: false, error: "Invalid action" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     })
 
   } catch (error) {
-    console.error("🚨 FATAL CATCH BLOCK ERROR:", error);
+    console.error("🚨 ERROR:", error);
     return new Response(JSON.stringify({ error: (error as Error).message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
