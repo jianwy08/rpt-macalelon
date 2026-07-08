@@ -67,7 +67,7 @@ export default function Accounts({ token }) {
     }
   };
 
- const handleChangePassword = async (e) => {
+const handleChangePassword = async (e) => {
   e.preventDefault();
   setErr(""); setMsg("");
   
@@ -78,9 +78,10 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // Grabs the Anon Key from Vercel/Local safely
+    // We use your environment variable here
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
 
+    // We use standard fetch, NOT db.functions.invoke
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
       headers: {
@@ -97,7 +98,6 @@ export default function Accounts({ token }) {
 
     const result = await response.json();
     
-    // If the server still throws an error, this will catch it
     if (!response.ok) {
       throw new Error(result.error || "Failed to update password.");
     }
