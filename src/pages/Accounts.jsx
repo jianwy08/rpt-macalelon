@@ -78,11 +78,15 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // 🌟 No token needed! We are sending it straight to the function
+    // This automatically grabs that long string without you hardcoding it!
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
+
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${anonKey}`, 
+        "apikey": anonKey                     
       },
       body: JSON.stringify({
         userId: selectedUser.id,   
