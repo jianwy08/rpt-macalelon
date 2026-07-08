@@ -76,19 +76,13 @@ export default function Accounts({ token }) {
     return; 
   }
 
-  // 🌟 THE FIX: Check if your existing token variable is empty
-  if (!token) {
-    setErr("Your session is invalid or expired. Please log out and log back in!");
-    return;
-  }
-
   setPasswordLoading(true);
   try {
+    // 🌟 No token needed! We are sending it straight to the function
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}` // Back to using your existing token!
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         userId: selectedUser.id,   
