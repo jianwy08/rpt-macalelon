@@ -30,21 +30,26 @@ export default function Accounts({ token }) {
     loadUsers();
   }, [loadUsers]);
 
-  const handleAdd = async (e) => {
+const handleAdd = async (e) => {
     e.preventDefault();
     setErr(""); setMsg("");
     try {
+      // Using your Vercel keys just like the password function for consistency
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
+
       const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${anonKey}`,
+          "apikey": anonKey
         },
         body: JSON.stringify({
           email: form.email,
           password: form.pass,
           fullName: form.full_name,
-          role: form.role
+          role: form.role,
+          action: "create_user" // 🌟 THIS is where this goes!
         })
       });
 
@@ -68,53 +73,50 @@ export default function Accounts({ token }) {
   };
 
 const handleChangePassword = async (e) => {
-  e.preventDefault();
-  setErr(""); setMsg("");
-  
-  if (newPassword.length < 6) { 
-    setErr("Password must be at least 6 characters."); 
-    return; 
-  }
-
-  setPasswordLoading(true);
-  try {
-    // We use your environment variable here
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
-
-    // We use standard fetch, NOT db.functions.invoke
-    const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${anonKey}`, 
-        "apikey": anonKey                     
-      },
-      body: JSON.stringify({
-        userId: selectedUser.id,   
-        password: newPassword.trim(), 
-        action: "update_password"  
-      })
-    });
-
-    const result = await response.json();
+    e.preventDefault();
+    setErr(""); setMsg("");
     
-    if (!response.ok) {
-      throw new Error(result.error || "Failed to update password.");
+    if (newPassword.length < 6) { 
+      setErr("Password must be at least 6 characters."); 
+      return; 
     }
 
-    setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
-    
-    if (typeof loadUsers === "function") loadUsers();
-    
-    setSelectedUser(null);
-    setNewPassword("");
-  } catch (e) {
-    setErr(e.message || "Failed to update password.");
-  } finally {
-    setPasswordLoading(false);
-  }
-};
+    setPasswordLoading(true);
+    try {
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
 
+      const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`, 
+          "apikey": anonKey                     
+        },
+        body: JSON.stringify({
+          userId: selectedUser.id,   
+          password: newPassword.trim(), 
+          action: "update_password"  // 🌟 Clean and fixed!
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update password.");
+      }
+
+      setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
+      
+      if (typeof loadUsers === "function") loadUsers();
+      
+      setSelectedUser(null);
+      setNewPassword("");
+    } catch (e) {
+      setErr(e.message || "Failed to update password.");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
   return (
     <div style={{ padding: "30px", maxWidth: "1000px", margin: "0 auto", animation: "fadeIn 0.4s" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px" }}>
