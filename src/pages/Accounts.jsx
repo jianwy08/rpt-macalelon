@@ -70,25 +70,25 @@ export default function Accounts({ token }) {
  const handleChangePassword = async (e) => {
   e.preventDefault();
   setErr(""); setMsg("");
-  if (newPassword.length < 6) { setErr("Password must be at least 6 characters."); return; }
+  
+  if (newPassword.length < 6) { 
+    setErr("Password must be at least 6 characters."); 
+    return; 
+  }
+
+  // 🌟 THE FIX: Check if your existing token variable is empty
+  if (!token) {
+    setErr("Your session is invalid or expired. Please log out and log back in!");
+    return;
+  }
 
   setPasswordLoading(true);
   try {
-    // 🌟 STEP 1: Grab the fresh, active login token from Supabase
-    const { data: authData, error: authError } = await db.auth.getSession();
-    const activeToken = authData?.session?.access_token;
-
-    // If there is no token, the user's login expired
-    if (!activeToken || authError) {
-      throw new Error("Your session expired. Please log out and log back in!");
-    }
-
-    // 🌟 STEP 2: Send the request using the REAL active token
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${activeToken}` // Using the fresh token we just grabbed
+        "Authorization": `Bearer ${token}` // Back to using your existing token!
       },
       body: JSON.stringify({
         userId: selectedUser.id,   
@@ -102,7 +102,6 @@ export default function Accounts({ token }) {
 
     setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
     
-    // Refresh the table layout cleanly if you have a loadUsers function
     if (typeof loadUsers === "function") loadUsers();
     
     setSelectedUser(null);
