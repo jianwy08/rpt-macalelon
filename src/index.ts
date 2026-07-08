@@ -7,39 +7,54 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
-  // Handle the browser security check (Preflight)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { userId, password, email, fullName, role, action } = await req.json()
+    console.log("🚀 Edge Function triggered!");
     
-    // This grabs your Master Key automatically from Supabase's secure vault
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    const body = await req.json();
+    console.log("📦 Received payload:", body);
+    
+    const { userId, password, action } = body;
+    
+    // Grab keys
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-    // 🌟 THE PASSWORD UPDATE LOGIC
+    if (!serviceRoleKey) {
+        console.error("❌ ERROR: Missing Service Role Key in environment variables!");
+        throw new Error("Missing Service Role Key.");
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
     if (action === 'update_password') {
-      const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password })
-      if (error) throw error
+      console.log(`🔐 Attempting to update password for user ID: ${userId}`);
+      
+      const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+      
+      if (error) {
+          console.error("❌ SUPABASE API ERROR:", error);
+          throw error;
+      }
+      
+      console.log("✅ Password updated successfully!");
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
     }
 
-    // 🌟 YOUR EXISTING ACCOUNT CREATION LOGIC (if you need it here later)
-    // You can add the create user logic here if you want to handle both in one file.
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, message: "Ignored: Action was not update_password" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error("🚨 FATAL CATCH BLOCK ERROR:", error);
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     })
