@@ -78,18 +78,28 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    const { error } = await db.functions.invoke('create-admin', {
-      body: {
+    // Grabs the Anon Key from Vercel/Local safely
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
+
+    const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${anonKey}`, 
+        "apikey": anonKey                     
+      },
+      body: JSON.stringify({
         userId: selectedUser.id,   
         password: newPassword.trim(), 
         action: "update_password"  
-      }
+      })
     });
 
-    // If the Edge Function returns an error, catch it here
-    if (error) {
-      console.error("Supabase Function Error:", error);
-      throw new Error("Failed to update password. The system blocked the request.");
+    const result = await response.json();
+    
+    // If the server still throws an error, this will catch it
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to update password.");
     }
 
     setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
