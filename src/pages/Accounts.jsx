@@ -74,12 +74,21 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // 🌟 THIS IS THE BRIDGE: It sends the new password to your newly deployed Edge Function
+    // 🌟 STEP 1: Grab the fresh, active login token from Supabase
+    const { data: authData, error: authError } = await db.auth.getSession();
+    const activeToken = authData?.session?.access_token;
+
+    // If there is no token, the user's login expired
+    if (!activeToken || authError) {
+      throw new Error("Your session expired. Please log out and log back in!");
+    }
+
+    // 🌟 STEP 2: Send the request using the REAL active token
     const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}` 
+        "Authorization": `Bearer ${activeToken}` // Using the fresh token we just grabbed
       },
       body: JSON.stringify({
         userId: selectedUser.id,   
@@ -92,6 +101,10 @@ export default function Accounts({ token }) {
     if (!response.ok) throw new Error(result.error || "Failed to update password.");
 
     setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
+    
+    // Refresh the table layout cleanly if you have a loadUsers function
+    if (typeof loadUsers === "function") loadUsers();
+    
     setSelectedUser(null);
     setNewPassword("");
   } catch (e) {
