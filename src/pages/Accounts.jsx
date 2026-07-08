@@ -78,8 +78,7 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // 🌟 Let the Supabase client handle all the security and headers automatically!
-    const { data, error } = await db.functions.invoke('create-admin', {
+    const { error } = await db.functions.invoke('create-admin', {
       body: {
         userId: selectedUser.id,   
         password: newPassword.trim(), 
