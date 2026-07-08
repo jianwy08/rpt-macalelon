@@ -78,31 +78,20 @@ export default function Accounts({ token }) {
 
   setPasswordLoading(true);
   try {
-    // 🌟 THE SECURE WAY: Grabbing the key from Vercel's environment variables
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; 
-
-    // Safety check: This will instantly tell you in the browser console if Vercel failed to load the key
-    if (!anonKey) {
-       console.error("Vercel did not load the Anon Key!");
-       throw new Error("System configuration error. Please contact support.");
-    }
-
-    const response = await fetch(`${SUPA_URL}/functions/v1/create-admin`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${anonKey}`, 
-        "apikey": anonKey                     
-      },
-      body: JSON.stringify({
+    // 🌟 Let the Supabase client handle all the security and headers automatically!
+    const { data, error } = await db.functions.invoke('create-admin', {
+      body: {
         userId: selectedUser.id,   
         password: newPassword.trim(), 
         action: "update_password"  
-      })
+      }
     });
 
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Failed to update password.");
+    // If the Edge Function returns an error, catch it here
+    if (error) {
+      console.error("Supabase Function Error:", error);
+      throw new Error("Failed to update password. The system blocked the request.");
+    }
 
     setMsg(`Password for ${selectedUser.full_name} has been securely updated!`);
     
