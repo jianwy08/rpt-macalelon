@@ -1,46 +1,62 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts";
-import { withSupabase } from "@supabase/server";
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+}
 
-console.log("Hello from Functions!");
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
 
-// This endpoint uses 'publishable' | 'secret' access, apiKey is required.
-// Use publishable for Client-facing, key-validated endpoints
-// Use secret for Server-to-server, internal calls
-export default {
-  fetch: withSupabase({ auth: ["publishable", "secret"] }, async (req, ctx) => {
-    // Called by another service with a secret key
-    // ctx.supabaseAdmin bypasses RLS — use for privileged operations
-    /*
-    if (ctx.authMode === "secret") {
-      const { user_id } = await req.json();
-      const { data } = await ctx.supabaseAdmin.auth.admin.getUserById(user_id);
+  try {
+    console.log("🚀 Edge Function triggered!");
+    
+    const body = await req.json();
+    console.log("📦 Received payload:", body);
+    
+    const { userId, password, action } = body;
+    
+    // Grab keys
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-      return Response.json({
-        email: data?.user?.email,
-      });
+    if (!serviceRoleKey) {
+        console.error("❌ ERROR: Missing Service Role Key in environment variables!");
+        throw new Error("Missing Service Role Key.");
     }
-    */
 
-    const { name } = await req.json();
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    return Response.json({
-      message: `Hello ${name}!`,
-    });
-  }),
-};
+    if (action === 'update_password') {
+      console.log(`🔐 Attempting to update password for user ID: ${userId}`);
+      
+      const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+      
+      if (error) {
+          console.error("❌ SUPABASE API ERROR:", error);
+          throw error;
+      }
+      
+      console.log("✅ Password updated successfully!");
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
 
-/* To invoke locally:
+    return new Response(JSON.stringify({ success: true, message: "Ignored: Action was not update_password" }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    })
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/create-admin' \
-    --header 'apiKey: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH' \
-    --data '{"name":"Functions"}'
-
-*/
+  } catch (error) {
+    console.error("🚨 FATAL CATCH BLOCK ERROR:", error);
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    })
+  }
+})
