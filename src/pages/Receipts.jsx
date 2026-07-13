@@ -74,16 +74,18 @@ export default function Receipts({ token, profile }) {
         if (!window.confirm(`Permanently delete Receipt ${rec.or_number}? This cannot be undone.`)) return;
         setDeleting(true);
         try {
-            // 🌟 FIXED: Added console.debug to use the error and fill the empty block
-            try { 
-                await db.delete("official_receipts", { filter: `collection_id=eq.${rec.id}` }, token); 
-            } catch (error) { 
-                console.debug("Optional table skip:", error); 
-            }
+            // 1. DELETE THE CHILD FIRST: 
+            // We delete from official_receipts where the collection_id matches the one we want to remove
+            await db.delete("official_receipts", { filter: `collection_id=eq.${rec.id}` }, token);
             
+            // 2. NOW DELETE THE PARENT:
+            // After the reference is gone, this will no longer violate the foreign key constraint
             await db.delete("collections", { filter: `or_number=eq.${rec.or_number}` }, token);
+            
+            alert("Receipt deleted successfully.");
             load();
         } catch (error) { 
+            console.error("Delete Error:", error);
             alert("Failed to delete receipt: " + error.message); 
         }
         setDeleting(false);
