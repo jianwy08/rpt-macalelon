@@ -96,15 +96,28 @@ export default function Delinquency({ token, profile }) {
 
         setGenerating(true);
         try {
-            // 1. Fetch all properties with their assessed value (limit 50,000)
+           // 1. Fetch all properties with their assessed value (limit 50,000)
             const props = await db.select("properties", { select: "id, taxpayer_id, assessed_value", limit: 50000 }, token);
 
             // 2. Fetch existing delinquency records for the target year to avoid duplicates
             const existing = await db.select("delinquency", { filter: `tax_year=eq.${targetYear}`, select: "property_id", limit: 50000 }, token);
             const existingIds = new Set(existing.map(e => e.property_id));
 
-            // 3. Filter out properties that already have a record for this year
-            const toInsert = props.filter(p => !existingIds.has(p.id));
+          // 🌟 3. Fetch VALID payments for the target year.
+            const payments = await db.select("collections", { 
+                filter: `tax_year=eq.${targetYear}&is_voided=eq.false`, 
+                select: "property_id, quarter", 
+                limit: 50000 
+            }, token);
+
+            // 🌟 STRICT CHECK: Only consider the property "fully paid" if their receipt says "FULL" or includes "4" (for Q4)
+            const paidIds = new Set(
+                payments
+                    .filter(p => p.quarter === "FULL" || String(p.quarter).includes("4"))
+                    .map(p => p.property_id)
+            );
+            // 🌟 UPDATED: 4. Filter out properties that already have a delinquency record OR have already paid!
+            const toInsert = props.filter(p => !existingIds.has(p.id) && !paidIds.has(p.id));
 
             if (toInsert.length === 0) {
                 alert(`All properties have already been billed for ${targetYear}!`);
@@ -204,10 +217,11 @@ export default function Delinquency({ token, profile }) {
 
             if (paidQuarters.includes(1) && paidQuarters.includes(2) && paidQuarters.includes(3) && paidQuarters.includes(4)) continue;
 
-            let rowBasic = 0, rowSef = 0, rowPen = 0, rowDisc = 0;
-            let mosLate = 0;
+           // ... [Keep the paidQuarters check above this] ...
 
-            // 🌟 NEW: Calculate EXACT display penalty percent
+            let rowBasic = 0, rowSef = 0;
+            let rawPen = 0, rawDisc = 0; // 🌟 Track raw floats here too!
+            let mosLate = 0;
             let penaltyRateDisplay = 0;
 
             const qBaseBasic = rd(basic / 4);
@@ -224,20 +238,21 @@ export default function Delinquency({ token, profile }) {
 
                 [1, 2, 3, 4].forEach(q => {
                     if (!paidQuarters.includes(q)) {
-                        rowBasic += getQBasic(q); rowSef += getQSef(q); rowPen += rd(getQDue(q) * penaltyRateDisplay);
+                        rowBasic += getQBasic(q); rowSef += getQSef(q); 
+                        rawPen += getQDue(q) * penaltyRateDisplay; // 🌟 Add raw penalty
                     }
                 });
             } else if (y === currentYear) {
-                penaltyRateDisplay = "VARIES"; // Because quarters have different penalties in current year
+                penaltyRateDisplay = "VARIES"; 
                 [1, 2, 3, 4].forEach(q => {
                     if (!paidQuarters.includes(q)) {
                         rowBasic += getQBasic(q); rowSef += getQSef(q);
                         const dueMo = qDeadlines[q - 1];
                         if (payMonth <= dueMo) {
-                            rowDisc += rd(getQDue(q) * 0.10);
+                            rawDisc += getQDue(q) * 0.10; // 🌟 Add raw discount
                         } else {
                             let currRate = Math.min(payMonth * 0.02, 0.72);
-                            rowPen += rd(getQDue(q) * currRate);
+                            rawPen += getQDue(q) * currRate; // 🌟 Add raw penalty
                         }
                     }
                 });
@@ -246,18 +261,23 @@ export default function Delinquency({ token, profile }) {
                 [1, 2, 3, 4].forEach(q => {
                     if (!paidQuarters.includes(q)) {
                         rowBasic += getQBasic(q); rowSef += getQSef(q);
-                        if (payMonth <= 9) { rowDisc += rd(getQDue(q) * 0.15); }
-                        else { rowDisc += rd(getQDue(q) * 0.10); }
+                        if (payMonth <= 9) { rawDisc += getQDue(q) * 0.15; }
+                        else { rawDisc += getQDue(q) * 0.10; }
                     }
                 });
             }
 
             if (mosLate > maxMos) maxMos = mosLate;
 
-            rowBasic = rd(rowBasic); rowSef = rd(rowSef); rowPen = rd(rowPen); rowDisc = rd(rowDisc);
+            // 🌟 Round everything cleanly at the end of the year!
+            rowBasic = rd(rowBasic); 
+            rowSef = rd(rowSef); 
+            let rowPen = rd(rawPen); 
+            let rowDisc = rd(rawDisc);
             const rowTotal = rd(rowBasic + rowSef + rowPen - rowDisc);
 
             if (rowTotal > 0) {
+               // ... [Keep the rows.push logic below this] ...
                 rows.push({ year: y, av: av, penalty_percent: penaltyRateDisplay, basic: rowBasic, sef: rowSef, penalty: rowPen, discount: rowDisc, total: rowTotal });
                 tBasic += rowBasic; tSef += rowSef; tPen += rowPen; tDisc += rowDisc; gTotal += rowTotal; tAv += av;
             }
@@ -404,31 +424,33 @@ export default function Delinquency({ token, profile }) {
         const getQSef = (q) => q === 4 ? rd(sef - (qBaseSef * 3)) : qBaseSef;
         const getQDue = (q) => rd(getQBasic(q) + getQSef(q));
 
-        let rowPen = 0;
-        let rowDisc = 0;
+        let rawPen = 0;  // 🌟 NEW: Calculate using raw floats
+        let rawDisc = 0; // 🌟 NEW: Calculate using raw floats
 
         if (y < currentYear) {
             const mosLate = ((currentYear - y) * 12) + targetMonth;
             const penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
-            [1, 2, 3, 4].forEach(q => { rowPen += rd(getQDue(q) * penaltyRate); });
+            [1, 2, 3, 4].forEach(q => { rawPen += getQDue(q) * penaltyRate; });
         } else if (y === currentYear) {
             const qDeadlines = [3, 6, 9, 12];
             [1, 2, 3, 4].forEach(q => {
                 const dueMo = qDeadlines[q - 1];
                 if (targetMonth <= dueMo) {
-                    rowDisc += rd(getQDue(q) * 0.10);
+                    rawDisc += getQDue(q) * 0.10;
                 } else {
                     let currRate = Math.min(targetMonth * 0.02, 0.72);
-                    rowPen += rd(getQDue(q) * currRate);
+                    rawPen += getQDue(q) * currRate;
                 }
             });
         } else {
             [1, 2, 3, 4].forEach(q => {
-                if (targetMonth <= 9) rowDisc += rd(getQDue(q) * 0.15);
-                else rowDisc += rd(getQDue(q) * 0.10);
+                if (targetMonth <= 9) rawDisc += getQDue(q) * 0.15;
+                else rawDisc += getQDue(q) * 0.10;
             });
         }
-        return { pen: rd(rowPen), disc: rd(rowDisc) };
+        
+        // 🌟 Round only at the very end to prevent compounding centavo errors!
+        return { pen: rd(rawPen), disc: rd(rawDisc) };
     };
 
     const handleRecalculate = async (group) => {

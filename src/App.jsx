@@ -13,6 +13,7 @@ import Receipts from "./pages/Receipts";
 import Reports from "./pages/Reports";
 import AuditLogs from "./pages/AuditLogs";
 import Accounts from "./pages/Accounts";
+import AccountableForms from "./components/AccountableForms";
 import "./index.css";
 
 // ── Animated counter ────────────────────────────────────────────────────────
@@ -63,7 +64,7 @@ export default function App() {
       }
   }, [page, session]);
 
-  // 🌟 CHANGE 4: The Session Restorer Engine
+// 🌟 CHANGE 4: The Session Restorer Engine
   useEffect(() => {
       const restoreSession = async () => {
           // Ask Supabase for a saved session token
@@ -71,6 +72,21 @@ export default function App() {
 
           if (savedSession) {
               try {
+                  // 🌟 THE REFRESH GUARD
+                  // Interrogate the session: Did they actually finish their MFA?
+                  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+                  
+                  if (aal && aal.nextLevel === 'aal2' && aal.currentLevel === 'aal1') {
+                      console.log("Incomplete MFA session detected on refresh. Securing account...");
+                      
+                      // Incinerate the half-finished session and force them to start over
+                      await supabase.auth.signOut();
+                      setSession(null);
+                      setIsInitializing(false);
+                      return; // 🛑 Stop the login process right here!
+                  }
+
+                  // ✅ Normal secure load (they passed MFA or don't need it)
                   const user = savedSession.user;
                   const token = savedSession.access_token;
                   
@@ -155,6 +171,7 @@ export default function App() {
     auditlogs: <AuditLogs token={session.token} />,
     settings: <Settings theme={theme} setTheme={setTheme} user={session.user} profile={session.profile} />,
     accounts: <Accounts token={session.token} profile={session.profile} />,
+    forms: <AccountableForms token={session.token} profile={session.profile} />,
   };
 
   const isSuper = session?.profile?.role === "superadmin";

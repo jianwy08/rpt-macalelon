@@ -23,7 +23,10 @@ export default function Taxpayers({ token, profile }) {
     const [showPropForm, setShowPropForm] = useState(false);
     const [savingProp, setSavingProp] = useState(false);
     const [editPropId, setEditPropId] = useState(null);
-    const [propForm, setPropForm] = useState({ td_number: "", pin: "", classification: "Residential", barangay: "", assessed_value: "", container_code: "" });
+    const [propForm, setPropForm] = useState({ 
+        td_number: "", pin: "", classification: "Residential", barangay: "", 
+        assessed_value: "", container_code: "", status: "ACTIVE", remarks: "" 
+    });
 
     const [totals, setTotals] = useState({ taxpayers: 0, properties: 0 });
 
@@ -142,9 +145,14 @@ export default function Taxpayers({ token, profile }) {
         try {
             const av = parseFloat(propForm.assessed_value);
             const payload = {
-                td_number: propForm.td_number, property_index_no: propForm.pin,
-                classification: propForm.classification, barangay: propForm.barangay,
-                assessed_value: av, container_code: propForm.container_code
+                td_number: propForm.td_number, 
+                property_index_no: propForm.pin,
+                classification: propForm.classification, 
+                barangay: propForm.barangay,
+                assessed_value: av, 
+                container_code: propForm.container_code,
+                status: propForm.status,      // 🌟 NEW FIELD
+                remarks: propForm.remarks     // 🌟 NEW FIELD
             };
 
             if (editPropId) {
@@ -152,6 +160,7 @@ export default function Taxpayers({ token, profile }) {
             } else {
                 payload.taxpayer_id = sel.id;
                 await db.insert("properties", payload, token);
+            
                 const savedProp = await db.select("properties", { filter: `td_number=eq.${propForm.td_number}` }, token);
 
                 if (savedProp && savedProp.length > 0) {
@@ -164,14 +173,14 @@ export default function Taxpayers({ token, profile }) {
                 }
             }
 
-            const p = await db.select("properties", { filter: `taxpayer_id=eq.${sel.id}` }, token);
+          const p = await db.select("properties", { filter: `taxpayer_id=eq.${sel.id}` }, token);
             setProps(p);
             setShowPropForm(false);
             setEditPropId(null);
-            setPropForm({ td_number: "", pin: "", classification: "Residential", barangay: "", assessed_value: "", container_code: "" });
+            setPropForm({ td_number: "", pin: "", classification: "Residential", barangay: "", assessed_value: "", container_code: "", status: "ACTIVE", remarks: "" });
             loadTotals();
         } catch (e) {
-            alert(e.message.includes("duplicate key") ? "Wait! This TD Number or PIN is already registered in the system." : "Failed to save property: " + e.message);
+            alert(e.message.includes("duplicate key") ? "Wait! This TD Number or PIN is already registered." : "Failed to save: " + e.message);
         }
         setSavingProp(false);
     };
@@ -324,6 +333,16 @@ export default function Taxpayers({ token, profile }) {
                                                 <div style={{ fontSize: 12, color: "var(--blue)", fontFamily: "var(--font-mono)", marginTop: 4, fontWeight: "bold" }}>PIN: {p.property_index_no || "—"}</div>
                                                 <div style={{ fontSize: 12, color: "var(--gold2)", fontFamily: "var(--font-mono)", marginTop: 4, fontWeight: "bold" }}>🗄️ LOCATOR: {p.container_code || "Unassigned"}</div>
                                                 <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{p.classification} · {p.barangay || "—"}</div>
+                                                {p.status !== 'ACTIVE' && (
+                                                    <div style={{ marginTop: "8px" }}>
+                                                        <span className={`badge ${p.status === 'CANCELLED' ? 'badge-red' : 'badge-gold'}`}>
+                                                            {p.status}
+                                                        </span>
+                                                        <div style={{ fontSize: "10px", marginTop: "2px", fontStyle: "italic", color: "var(--text-muted)" }}>
+                                                            {p.remarks}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div style={{ textAlign: "right" }}>
                                                 <div className="amount-lg" style={{ fontSize: 16 }}>{fmt(p.assessed_value)}</div>
@@ -457,6 +476,25 @@ export default function Taxpayers({ token, profile }) {
                         <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
                             <button className="btn btn-outline" onClick={() => { setShowPropForm(false); setEditPropId(null); }}>Cancel</button>
                             <button className="btn btn-success" onClick={saveProperty} disabled={savingProp}>{savingProp ? "Saving..." : "💾 Save Property"}</button>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: 16 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: 16 }}>
+                            <div className="form-group">
+                                <label className="form-label">Status</label>
+                                <select value={propForm.status} onChange={e => setPropForm({ ...propForm, status: e.target.value })}>
+                                    <option value="ACTIVE">ACTIVE</option>
+                                    <option value="CANCELLED">CANCELLED</option>
+                                    <option value="SUBDIVIDED">SUBDIVIDED</option>
+                                    <option value="RELOCATED">RELOCATED</option>
+                                    <option value="PIN CHANGED">PIN CHANGED</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Remarks</label>
+                                <input placeholder="e.g. Cancelled due to subdivision..." value={propForm.remarks} onChange={e => setPropForm({ ...propForm, remarks: e.target.value })} />
+                            </div>
+                        </div>    
+                                  
                         </div>
                     </div>
                 </div>

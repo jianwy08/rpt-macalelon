@@ -12,7 +12,7 @@ export default function Login({ onLogin, onOpenKiosk }) {
 
     const [mode, setMode] = useState("login");
 
-    const submit = async () => {
+  const submit = async () => {
         setErr(""); setMsg("");
 
         if (!email) { setErr("Email is required."); return; }
@@ -41,12 +41,19 @@ export default function Login({ onLogin, onOpenKiosk }) {
                     }
                 }
 
-                // Normal secure login flow
+                // Normal secure login flow (No MFA required)
                 const user = authData.user;
                 const token = authData.session.access_token;
                 const profiles = await db.select("user_profiles", { filter: `id=eq.${user.id}` }, token);
+                const userProfile = profiles[0] || { full_name: email, role: "cashier" };
                 
-                onLogin({ token, user, profile: profiles[0] || { full_name: email, role: "cashier" } });
+                // 🌟 THE CONDITIONAL KILL SWITCH
+                if (userProfile.role !== "superadmin") {
+                    await supabase.auth.signOut({ scope: 'others' });
+                    console.log("Standard profile: Other devices disconnected.");
+                }
+
+                onLogin({ token, user, profile: userProfile });
             }
         } catch (e) {
             let errMsg = e.message;
@@ -77,14 +84,22 @@ export default function Login({ onLogin, onOpenKiosk }) {
             const token = session.access_token;
             
             const profiles = await db.select("user_profiles", { filter: `id=eq.${user.id}` }, token);
-            onLogin({ token, user, profile: profiles[0] || { full_name: email, role: "cashier" } });
+            const userProfile = profiles[0] || { full_name: email, role: "cashier" };
+
+            // 🌟 THE CONDITIONAL KILL SWITCH (After successful MFA)
+            if (userProfile.role !== "superadmin") {
+                await supabase.auth.signOut({ scope: 'others' });
+                console.log("Standard profile: Other devices disconnected after MFA.");
+            }
+
+            onLogin({ token, user, profile: userProfile });
 
         } catch (e) {
             console.log(e);
             setErr("Invalid 6-digit code. Please try again.");
         }
         setLoading(false);
-    };
+    }; 
 
     return (
         <div className="login-shell">

@@ -23,6 +23,7 @@ export default function Sidebar({ active, setActive, profile, onLogout, delinqCo
                 { id: "collection", icon: "💰", label: "Collection" },
                 { id: "delinquency", icon: "⚠️", label: "Delinquency", badge: delinqCount || null },
                 { id: "receipts", icon: "🧾", label: "Official Receipts" },
+                { id: "forms", icon: "📚", label: "Accountable Forms" },
             ]
         },
         {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { db, today, fmt } from "../utils/db";
 import PrintableReceipt from "../components/PrintableReceipt";
 
@@ -25,7 +25,48 @@ export default function Collection({ token, profile }) {
     const [issued, setIssued] = useState(null);
     const [err, setErr] = useState("");
     const [paymentDate, setPaymentDate] = useState(today());
+    const [cashierList, setCashierList] = useState([]);
+    const [selectedCashier, setSelectedCashier] = useState("");
+    const [activeBooklet, setActiveBooklet] = useState(null);
+    const [nextOR, setNextOR] = useState("");
     const rd = (num) => Math.floor((parseFloat(num) || 0) * 100 + 0.0001) / 100;
+
+    // 🌟 1. FETCH ALL USERS FOR THE DROPDOWN
+    useEffect(() => {
+        const fetchCashiers = async () => {
+            try {
+                const users = await db.select("user_profiles", { order: "full_name.asc" }, token);
+                setCashierList(Array.isArray(users) ? users : []);
+                if (profile?.full_name) setSelectedCashier(profile.full_name.toUpperCase());
+            } catch (e) { console.error(e); }
+        };
+        fetchCashiers();
+    }, [profile, token]);
+
+    // 🌟 2. FETCH AF56 BOOKLET WHEN CASHIER IS SELECTED
+    useEffect(() => {
+        const fetchBooklet = async () => {
+            if (!selectedCashier) return;
+            try {
+                setNextOR("Loading...");
+                const forms = await db.select("accountable_forms", {
+                    filter: `officer_name=eq.${selectedCashier.toUpperCase()}&status=eq.ACTIVE`,
+                    order: "date_issued.asc" // Gets the oldest active booklet first
+                }, token);
+
+                if (forms && forms.length > 0) {
+                    setActiveBooklet(forms[0]);
+                    setNextOR(String(forms[0].current_serial));
+                    setOrNumber(String(forms[0].current_serial)); // Syncs with your existing state!
+                } else {
+                    setActiveBooklet(null);
+                    setNextOR("NO ACTIVE BOOKLET");
+                    setOrNumber("");
+                }
+            } catch (e) { console.error(e); }
+        };
+        fetchBooklet();
+    }, [selectedCashier, token]);
 
     // 🌟 NEW: Smart parser to understand exactly which quarters have been paid
     const parseQuarters = (qStr) => {
@@ -230,8 +271,12 @@ export default function Collection({ token, profile }) {
     gTotal = rd(gTotal);
 
     const post = async () => {
+        if (!activeBooklet) {
+            setErr(`Cannot post payment. ${selectedCashier} has no active AF56 booklets assigned.`);
+            return;
+        }
         if (!orNumber.trim()) {
-            setErr("Official Receipt (OR) Number is required. Please encode the serial number from Form 56.");
+            setErr("Official Receipt (OR) Number is required.");
             return;
         }
 
@@ -264,7 +309,13 @@ export default function Collection({ token, profile }) {
             const col = insertedRows[0];
 
             await db.insert("official_receipts", { or_number: mainOr, collection_id: col.id, printed_by: profile?.id, print_count: 0 }, token);
-
+            // 🌟 ADVANCE THE AF56 BOOKLET SERIAL NUMBER
+            const nextSerialNum = activeBooklet.current_serial + 1;
+            const isConsumed = nextSerialNum > activeBooklet.serial_to;
+            await db.update("accountable_forms", 
+                { current_serial: nextSerialNum, status: isConsumed ? "CONSUMED" : "ACTIVE" }, 
+                { filter: `id=eq.${activeBooklet.id}` }, 
+            token);
             // 🌟 FIXED: Only mark the delinquency as PAID if they settle the 4th Quarter!
             for (const item of dbCart) {
                 if (item.quarterTag === "FULL" || item.quarterTag.includes("4")) {
@@ -464,14 +515,23 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                 <div className="panel-title">Payment Options</div>
                                 <div className="form-grid" style={{ marginBottom: 14 }}>
 
+                                    <div className="form-group span2" style={{ marginBottom: 8 }}>
+                                        <label className="form-label">Accountable Officer (Cashier)</label>
+                                        <select value={selectedCashier} onChange={e => setSelectedCashier(e.target.value)} className="input" style={{ width: "100%", padding: "10px" }}>
+                                            <option value="" disabled>Select Cashier...</option>
+                                            {cashierList.map(c => <option key={c.id} value={(c.full_name || "").toUpperCase()}>{(c.full_name || "").toUpperCase()}</option>)}
+                                        </select>
+                                    </div>
+
                                     <div className="form-group span2" style={{ marginBottom: 8, padding: "12px", background: "rgba(220, 38, 38, 0.05)", borderRadius: "8px", border: "1px dashed var(--red2)" }}>
                                         <label className="form-label" style={{ color: "var(--red2)", fontWeight: "bold" }}>Official Receipt (OR) Number *</label>
                                         <input
-                                            value={orNumber}
-                                            onChange={e => setOrNumber(e.target.value)}
-                                            placeholder="Enter Serial Number from Form 56..."
-                                            style={{ border: "2px solid var(--red2)", fontWeight: "bold" }}
+                                            readOnly
+                                            value={nextOR}
+                                            placeholder="Select a cashier to load OR..."
+                                            style={{ border: "2px solid var(--red2)", fontWeight: "bold", background: "var(--bg2)", color: activeBooklet ? "inherit" : "var(--red2)" }}
                                         />
+                                        {!activeBooklet && selectedCashier && <div style={{color: "var(--red2)", fontSize: "11px", marginTop: "4px"}}>This cashier has no active AF56 booklets. Assign one in Accountable Forms.</div>}
                                     </div>
 
                                     <div className="form-group">
