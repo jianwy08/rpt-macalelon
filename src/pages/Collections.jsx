@@ -29,6 +29,7 @@ export default function Collection({ token, profile }) {
     const [selectedCashier, setSelectedCashier] = useState("");
     const [activeBooklet, setActiveBooklet] = useState(null);
     const [nextOR, setNextOR] = useState("");
+    const [remittanceDate, setRemittanceDate] = useState(today());
     const rd = (num) => Math.floor((parseFloat(num) || 0) * 100 + 0.0001) / 100;
 
     // 🌟 1. FETCH ALL USERS FOR THE DROPDOWN
@@ -285,13 +286,14 @@ export default function Collection({ token, profile }) {
             const mainOr = orNumber.trim();
 
             // 🌟 FIXED: Forced null and 0 values to prevent PGRST102 key errors!
-            const rowsToInsert = dbCart.map((item) => ({
+          const rowsToInsert = dbCart.map((item) => ({
                 or_number: mainOr,
                 taxpayer_id: found.id,
                 property_id: item.property_id,
                 assessment_id: item.assessment_id || null,
                 tax_year: item.year,
                 payment_date: paymentDate,
+                remittance_date: remittanceDate, // 🌟 ADD THIS EXACT LINE
                 payment_method: method,
                 quarter: item.quarterTag || "FULL",
                 basic_tax: item.basic || 0,
@@ -593,6 +595,21 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                             style={{ border: "2px solid var(--blue2)" }}
                                         />
                                     </div>
+
+                                    {/* 🌟 NEW: THE REMITTANCE DATE PICKER */}
+                                    <div className="form-group">
+                                        <label className="form-label" style={{ color: "var(--gold2)", fontWeight: "bold" }}>Remittance / RCD Date</label>
+                                        <input
+                                            type="date"
+                                            value={remittanceDate}
+                                            onChange={e => setRemittanceDate(e.target.value)}
+                                            style={{ border: "2px solid var(--gold2)" }}
+                                        />
+                                        <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
+                                            Change this to tomorrow for after-cutoff payments!
+                                        </div>
+                                    </div>
+                                    {/* 🌟 END OF NEW BLOCK */}
 
                                     <div className="form-group span2" style={{ marginTop: "8px" }}>
                                         <label className="form-label">Paid By (Actual person paying)</label>

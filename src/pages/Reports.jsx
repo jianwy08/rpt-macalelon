@@ -123,9 +123,16 @@ export default function Reports({ token, profile }) {
 
         // 🌟 FETCH COLLECTIONS & FILTER BY SELECTED CASHIER
         const safeDateStr = String(date || getToday());
-        let filter = (tab === "daily" || tab === "rcd")
-          ? `payment_date=eq.${safeDateStr}`
-          : `payment_date=gte.${safeDateStr.slice(0, 7)}-01&payment_date=lte.${safeDateStr.slice(0, 7)}-31&is_voided=eq.false`;
+        
+        // 🌟 NEW LOGIC: The Daily/Monthly reports still use Payment Date, but the RCD uses Remittance Date!
+        let filter = "";
+        if (tab === "rcd") {
+            filter = `remittance_date=eq.${safeDateStr}`;
+        } else if (tab === "daily") {
+            filter = `payment_date=eq.${safeDateStr}`;
+        } else {
+            filter = `payment_date=gte.${safeDateStr.slice(0, 7)}-01&payment_date=lte.${safeDateStr.slice(0, 7)}-31&is_voided=eq.false`;
+        }
 
         // Apply the specific cashier filter to the database query!
         if (tab === "rcd" && selectedRcdCashier !== "ALL") {
