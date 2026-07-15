@@ -12,7 +12,7 @@ export default function Taxpayers({ token, profile }) {
     const [props, setProps] = useState([]);
     
     const [showForm, setShowForm] = useState(false);
-    const [showViewModal, setShowViewModal] = useState(false); // 🌟 NEW: Controls the View Modal
+    const [showViewModal, setShowViewModal] = useState(false); 
     
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -27,6 +27,12 @@ export default function Taxpayers({ token, profile }) {
         td_number: "", pin: "", classification: "Residential", barangay: "", 
         assessed_value: "", container_code: "", status: "ACTIVE", remarks: "" 
     });
+    
+    // 🌟 NEW: Payment History States
+    const [historyModal, setHistoryModal] = useState(false);
+    const [historyProp, setHistoryProp] = useState(null);
+    const [propHistory, setPropHistory] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
     const [totals, setTotals] = useState({ taxpayers: 0, properties: 0 });
 
@@ -60,7 +66,7 @@ export default function Taxpayers({ token, profile }) {
         try {
             await db.delete("taxpayers", { filter: `id=eq.${sel.id}` }, token);
             setSel(null);
-            setShowViewModal(false); // 🌟 Close modal after deletion
+            setShowViewModal(false); 
             load();
             loadTotals();
         } catch (e) { alert("Failed to delete: " + e.message); }
@@ -109,10 +115,9 @@ export default function Taxpayers({ token, profile }) {
         init();
     }, [load, loadTotals]);
 
-    // 🌟 NEW: Open View Modal Logic
     const openViewModal = async (t) => {
         setSel(t);
-        setShowViewModal(true); // Open the modal
+        setShowViewModal(true); 
         const p = await db.select("properties", { filter: `taxpayer_id=eq.${t.id}` }, token);
         setProps(p);
     };
@@ -151,8 +156,8 @@ export default function Taxpayers({ token, profile }) {
                 barangay: propForm.barangay,
                 assessed_value: av, 
                 container_code: propForm.container_code,
-                status: propForm.status,      // 🌟 NEW FIELD
-                remarks: propForm.remarks     // 🌟 NEW FIELD
+                status: propForm.status,      
+                remarks: propForm.remarks     
             };
 
             if (editPropId) {
@@ -194,6 +199,22 @@ export default function Taxpayers({ token, profile }) {
             setProps(refreshed);
             loadTotals();
         } catch (e) { alert("Cannot delete property. Error: " + e.message); }
+    };
+
+    const handleViewHistory = async (p) => {
+        setHistoryProp(p);
+        setHistoryModal(true);
+        setLoadingHistory(true);
+        try {
+            const data = await db.select("collections", {
+                filter: `property_id=eq.${p.id}`,
+                order: "payment_date.desc, tax_year.desc"
+            }, token);
+            setPropHistory(data || []);
+        } catch (error) {
+            alert("Failed to load payment history: " + error.message);
+        }
+        setLoadingHistory(false);
     };
 
     const fmt = (num) => {
@@ -278,10 +299,10 @@ export default function Taxpayers({ token, profile }) {
                 </div>
             </div>
 
-            {/* 🌟 NEW: THE TAXPAYER PROFILE & PROPERTIES MODAL */}
+            {/* THE TAXPAYER PROFILE & PROPERTIES MODAL */}
             {showViewModal && sel && (
                 <div className="modal-overlay">
-                    <div className="modal-content" style={{ maxWidth: "800px" }}> {/* Made slightly wider for the property grid */}
+                    <div className="modal-content" style={{ maxWidth: "800px" }}> 
                         
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", borderBottom: "1px solid var(--border)", paddingBottom: "16px" }}>
                             <div>
@@ -298,7 +319,7 @@ export default function Taxpayers({ token, profile }) {
                                                 contact_no: sel.contact_no || "", email: sel.email || "", tin: sel.tin || ""
                                             });
                                             setEditId(sel.id);
-                                            setShowForm(true); // Opens the Edit Modal directly on top!
+                                            setShowForm(true); 
                                         }}>✏️ Edit Profile</button>
                                         <button className="btn btn-danger btn-sm" onClick={handleDelete} disabled={deleting}>
                                             {deleting ? "..." : "🗑 Delete"}
@@ -313,9 +334,9 @@ export default function Taxpayers({ token, profile }) {
                             <div style={{ fontSize: 13, color: "var(--text-main)", fontWeight: "bold" }}>REGISTERED PROPERTIES ({props.length})</div>
                             {canEdit && (
                                 <button className="btn btn-primary btn-sm" onClick={() => {
-                                    setPropForm({ td_number: "", pin: "", classification: "Residential", barangay: "", assessed_value: "", container_code: "" });
+                                    setPropForm({ td_number: "", pin: "", classification: "Residential", barangay: "", assessed_value: "", container_code: "", status: "ACTIVE", remarks: "" });
                                     setEditPropId(null);
-                                    setShowPropForm(true); // Opens the Add Property Modal directly on top!
+                                    setShowPropForm(true); 
                                 }}>
                                     ＋ Add Property
                                 </button>
@@ -346,22 +367,35 @@ export default function Taxpayers({ token, profile }) {
                                             </div>
                                             <div style={{ textAlign: "right" }}>
                                                 <div className="amount-lg" style={{ fontSize: 16 }}>{fmt(p.assessed_value)}</div>
-                                                <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: "12px" }}>ASSESSED VALUE</div>
+                                              <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: "12px" }}>ASSESSED VALUE</div>
                                                 
-                                                {canEdit && (
-                                                    <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                                                        <button className="btn btn-ghost btn-xs" style={{ color: "var(--blue)" }} onClick={() => {
-                                                            setPropForm({
-                                                                td_number: p.td_number || "", pin: p.property_index_no || "",
-                                                                classification: p.classification || "Residential", barangay: p.barangay || "",
-                                                                assessed_value: p.assessed_value || "", container_code: p.container_code || ""
-                                                            });
-                                                            setEditPropId(p.id);
-                                                            setShowPropForm(true); // Opens Edit Property Modal directly on top!
-                                                        }}>✏️ Edit</button>
-                                                        <button className="btn btn-ghost btn-xs" style={{ color: "var(--red2)" }} onClick={() => handleDeleteProperty(p)}>✕ Del</button>
-                                                    </div>
-                                                )}
+                                                <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                                                    
+                                                    {/* History is always visible */}
+                                                    <button className="btn btn-ghost btn-xs" style={{ color: "var(--green)" }} onClick={() => handleViewHistory(p)}>
+                                                        📜 History
+                                                    </button>
+                                                    
+                                                    {/* Edit/Del are only for admins */}
+                                                    {canEdit && (
+                                                        <>
+                                                            <button className="btn btn-ghost btn-xs" style={{ color: "var(--blue)" }} onClick={() => {
+                                                                setPropForm({
+                                                                    td_number: p.td_number || "", pin: p.property_index_no || "",
+                                                                    classification: p.classification || "Residential", barangay: p.barangay || "",
+                                                                    assessed_value: p.assessed_value || "", container_code: p.container_code || "",
+                                                                    status: p.status || "ACTIVE", remarks: p.remarks || ""
+                                                                });
+                                                                setEditPropId(p.id);
+                                                                setShowPropForm(true);
+                                                            }}>✏️ Edit</button>
+                                                            
+                                                            <button className="btn btn-ghost btn-xs" style={{ color: "var(--red2)" }} onClick={() => handleDeleteProperty(p)}>
+                                                                ✕ Del
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -420,7 +454,7 @@ export default function Taxpayers({ token, profile }) {
                 </div>
             )}
 
-            {/* THE PROPERTY ADD/EDIT MODAL (Stacks automatically) */}
+            {/* THE PROPERTY ADD/EDIT MODAL */}
             {showPropForm && (
                 <div className="modal-overlay">
                     <div className="modal-content">
@@ -459,7 +493,7 @@ export default function Taxpayers({ token, profile }) {
                             </div>
                         </div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: 24 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: 16 }}>
                             <div className="form-group">
                                 <label className="form-label">Property Barangay</label>
                                 <select value={propForm.barangay} onChange={e => setPropForm({ ...propForm, barangay: e.target.value })}>
@@ -473,15 +507,10 @@ export default function Taxpayers({ token, profile }) {
                             </div>
                         </div>
 
-                        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
-                            <button className="btn btn-outline" onClick={() => { setShowPropForm(false); setEditPropId(null); }}>Cancel</button>
-                            <button className="btn btn-success" onClick={saveProperty} disabled={savingProp}>{savingProp ? "Saving..." : "💾 Save Property"}</button>
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: 16 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: 16 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px", marginBottom: 24, padding: "12px", background: "var(--bg2)", borderRadius: "8px", border: "1px dashed var(--border)" }}>
                             <div className="form-group">
                                 <label className="form-label">Status</label>
-                                <select value={propForm.status} onChange={e => setPropForm({ ...propForm, status: e.target.value })}>
+                                <select className="input" value={propForm.status} onChange={e => setPropForm({ ...propForm, status: e.target.value })}>
                                     <option value="ACTIVE">ACTIVE</option>
                                     <option value="CANCELLED">CANCELLED</option>
                                     <option value="SUBDIVIDED">SUBDIVIDED</option>
@@ -491,11 +520,73 @@ export default function Taxpayers({ token, profile }) {
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Remarks</label>
-                                <input placeholder="e.g. Cancelled due to subdivision..." value={propForm.remarks} onChange={e => setPropForm({ ...propForm, remarks: e.target.value })} />
+                                <input className="input" placeholder="e.g. Cancelled due to subdivision..." value={propForm.remarks} onChange={e => setPropForm({ ...propForm, remarks: e.target.value })} />
                             </div>
-                        </div>    
-                                  
                         </div>
+
+                        <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+                            <button className="btn btn-outline" onClick={() => { setShowPropForm(false); setEditPropId(null); }}>Cancel</button>
+                            <button className="btn btn-success" onClick={saveProperty} disabled={savingProp}>{savingProp ? "Saving..." : "💾 Save Property"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* THE PAYMENT HISTORY MODAL */}
+            {historyModal && historyProp && (
+                <div className="modal-overlay" style={{ zIndex: 9999 }}>
+                    <div className="modal-content" style={{ maxWidth: "700px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", borderBottom: "1px solid var(--border)", paddingBottom: "16px" }}>
+                            <div>
+                                <h2 style={{ margin: 0 }}>Payment Ledger</h2>
+                                <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
+                                    Showing all collections for TD: <strong>{historyProp.td_number}</strong> | PIN: <strong>{historyProp.property_index_no || "—"}</strong>
+                                </p>
+                            </div>
+                            <button className="btn btn-ghost btn-sm" onClick={() => { setHistoryModal(false); setHistoryProp(null); setPropHistory([]); }}>✕ Close</button>
+                        </div>
+
+                        {loadingHistory ? (
+                            <div className="loading-state" style={{ padding: "40px" }}><span className="spin" />Loading ledger...</div>
+                        ) : propHistory.length === 0 ? (
+                            <div className="empty" style={{ padding: "40px" }}>
+                                <div className="empty-icon">📜</div>
+                                <div className="empty-text">No payment records found for this property.</div>
+                            </div>
+                        ) : (
+                            <div className="table-wrap" style={{ maxHeight: "400px", overflowY: "auto" }}>
+                                <table>
+                                    <thead style={{ position: "sticky", top: 0, background: "var(--bg)", zIndex: 1 }}>
+                                        <tr>
+                                            <th>Date Paid</th>
+                                            <th>OR Number</th>
+                                            <th>Tax Year</th>
+                                            <th>Quarter</th>
+                                            <th style={{ textAlign: "right" }}>Total Paid</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {propHistory.map((h, i) => (
+                                            <tr key={i} style={{ opacity: h.is_voided ? 0.6 : 1 }}>
+                                                <td><span className="mono-sm">{h.payment_date}</span></td>
+                                                <td style={{ fontWeight: "bold", color: "var(--blue)" }}>{h.or_number}</td>
+                                                <td><span className="chip">{h.tax_year}</span></td>
+                                                <td>{h.quarter}</td>
+                                                <td style={{ textAlign: "right", fontWeight: "bold", fontFamily: "monospace", fontSize: "14px" }}>
+                                                    {fmt(h.total_paid)}
+                                                </td>
+                                                <td>
+                                                    {h.is_voided 
+                                                        ? <span className="badge badge-red">VOIDED</span> 
+                                                        : <span className="badge badge-green">VALID</span>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

@@ -30,6 +30,8 @@ export default function Collection({ token, profile }) {
     const [activeBooklet, setActiveBooklet] = useState(null);
     const [nextOR, setNextOR] = useState("");
     const [remittanceDate, setRemittanceDate] = useState(today());
+    const [addQ, setAddQ] = useState("");
+    const [addingProp, setAddingProp] = useState(false);
     const rd = (num) => Math.floor((parseFloat(num) || 0) * 100 + 0.0001) / 100;
 
     // 🌟 1. FETCH ALL USERS FOR THE DROPDOWN
@@ -85,20 +87,23 @@ export default function Collection({ token, profile }) {
         return [1, 2, 3, 4];
     };
 
-    const search = async () => {
+   const search = async () => {
         setErr("");
         try {
             let tp = [];
             const cleanQ = q.trim();
+            let matchedPropId = null; // 🌟 NEW: Remembers the exact property searched
 
-            const exactPin = await db.select("properties", { filter: `property_index_no=eq.${cleanQ}`, select: "taxpayer_id", limit: 1 }, token);
+            const exactPin = await db.select("properties", { filter: `property_index_no=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
             if (exactPin.length) {
+                matchedPropId = exactPin[0].id;
                 tp = await db.select("taxpayers", { filter: `id=eq.${exactPin[0].taxpayer_id}`, limit: 1 }, token);
             }
 
             if (!tp.length) {
-                const exactTd = await db.select("properties", { filter: `td_number=eq.${cleanQ}`, select: "taxpayer_id", limit: 1 }, token);
+                const exactTd = await db.select("properties", { filter: `td_number=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
                 if (exactTd.length) {
+                    matchedPropId = exactTd[0].id;
                     tp = await db.select("taxpayers", { filter: `id=eq.${exactTd[0].taxpayer_id}`, limit: 1 }, token);
                 }
             }
@@ -108,8 +113,9 @@ export default function Collection({ token, profile }) {
             }
 
             if (!tp.length) {
-                const propMatch = await db.select("properties", { filter: `or=(property_index_no.ilike.*${cleanQ}*,td_number.ilike.*${cleanQ}*)`, select: "taxpayer_id", limit: 1 }, token);
+                const propMatch = await db.select("properties", { filter: `or=(property_index_no.ilike.*${cleanQ}*,td_number.ilike.*${cleanQ}*)`, select: "id, taxpayer_id", limit: 1 }, token);
                 if (propMatch.length) {
+                    matchedPropId = propMatch[0].id;
                     tp = await db.select("taxpayers", { filter: `id=eq.${propMatch[0].taxpayer_id}`, limit: 1 }, token);
                 }
             }
@@ -119,8 +125,47 @@ export default function Collection({ token, profile }) {
             setFound(tp[0]);
             setPaidBy(`${tp[0].firstname} ${tp[0].lastname}`);
             const ps = await db.select("properties", { filter: `taxpayer_id=eq.${tp[0].id}` }, token);
-            setPropList(ps); setStep(2);
+            setPropList(ps); 
+            
+            // 🌟 NEW: Automatically check the box for the exact property searched!
+            if (matchedPropId) {
+                const pToSelect = ps.find(p => p.id === matchedPropId);
+                if (pToSelect) setSelectedProps([pToSelect]);
+                else setSelectedProps([]);
+            } else {
+                setSelectedProps([]);
+            }
+
+            setStep(2);
         } catch (e) { setErr(e.message); }
+    };
+    const handleAddProperty = async () => {
+        if (!addQ.trim()) return;
+        setAddingProp(true); setErr("");
+        try {
+            const cleanQ = addQ.trim();
+            // Strictly fetch exact match only to prevent adding the wrong property
+            const exactProp = await db.select("properties", { filter: `or=(property_index_no=eq.${cleanQ},td_number=eq.${cleanQ})`, limit: 1 }, token);
+            
+            if (exactProp.length) {
+                const newProp = exactProp[0];
+                
+                // Add to the visual list if it's not already there (e.g., owned by someone else)
+                if (!propList.find(p => p.id === newProp.id)) {
+                    setPropList(prev => [...prev, newProp]);
+                }
+                
+                // Automatically check its box!
+                if (!selectedProps.find(p => p.id === newProp.id)) {
+                    setSelectedProps(prev => [...prev, newProp]);
+                }
+                
+                setAddQ(""); // Clear the search bar
+            } else {
+                setErr("Property not found. Please enter an EXACT PIN or TD Number.");
+            }
+        } catch(e) { setErr(e.message); }
+        setAddingProp(false);
     };
 
     const toggleProp = (p) => {
@@ -361,7 +406,7 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                 ["Taxpayer:", `${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],
                                 ["Paid By:", issued.paid_by],
                                 ["Address:", issued.taxpayer.address || "—"],
-                                ["TD Number:", issued.properties?.length > 1 ? "MULTIPLE PROPERTIES" : issued.properties?.[0]?.td_number || "—"],
+                                ["TD Number:", issued.properties?.map(p => p.td_number).join(", ") || "—"],
 
                                 /* 🌟 HERE IS THE UPDATED LINE! */
                                 ["Year & Qtr:", `${issued.tax_year} (${issued.quarter_str})`],
@@ -404,14 +449,27 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                             <button className="btn btn-primary" onClick={() => window.print()}>🖨 Print to Epson LX-310 (AF 56)</button>
                             <button className="btn btn-outline" onClick={reset}>New Transaction</button>
                         </div>
-                        <div>
+                        
+                        {/* 🌟 NEW: Strict Print Isolation for the Epson Printer */}
+                        <style>{`
+                          @media screen {
+                            .af56-print-area { display: none; }
+                          }
+                          @media print {
+                            body * { visibility: hidden !important; }
+                            .af56-print-area, .af56-print-area * { visibility: visible !important; color: #000 !important; }
+                            .af56-print-area { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+                            .no-print { display: none !important; }
+                          }
+                        `}</style>
+                        <div className="af56-print-area">
                             <PrintableReceipt data={issued} />
                         </div>
                     </div>
                     <div className="panel">
                         <div className="panel-title">Transaction Summary</div>
                         <div className="detail-grid">
-                            {[["OR Number", issued.or_number], ["Taxpayer", `${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`], ["Paid By", issued.paid_by], ["TD No.", issued.property?.td_number || "—"], ["Tax Year", issued.tax_year], ["Quarter(s)", issued.quarter_str], ["Basic RPT", fmt(issued.basic_tax)], ["SEF", fmt(issued.sef_tax)], ["Total", fmt(issued.total_paid)], ["Method", issued.payment_method], ["Cashier", issued.cashier || "—"]].map(([k, v]) => (
+                            {[["OR Number", issued.or_number], ["Taxpayer", `${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`], ["Paid By", issued.paid_by], ["TD No.", issued.properties?.map(p => p.td_number).join(", ") || "—"], ["Tax Year", issued.tax_year], ["Quarter(s)", issued.quarter_str], ["Basic RPT", fmt(issued.basic_tax)], ["SEF", fmt(issued.sef_tax)], ["Total", fmt(issued.total_paid)], ["Method", issued.payment_method], ["Cashier", issued.cashier || "—"]].map(([k, v]) => (
                                 <div className="drow" key={k}><span className="dk">{k}</span><span className="dv">{v}</span></div>
                             ))}
                         </div>
@@ -464,6 +522,24 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                 ))}
                             </div>
                         </div>
+                        {/* 🌟 NEW: THE ADD PROPERTY COMPONENT */}
+                        <div className="panel" style={{ maxWidth: 520, marginBottom: 16, background: "var(--bg2)", border: "1px dashed var(--blue)" }}>
+                            <div style={{ fontSize: 13, fontWeight: "bold", color: "var(--blue2)", marginBottom: 8 }}>✚ Add Another Property to this Receipt</div>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                                <input 
+                                    className="input"
+                                    value={addQ} 
+                                    onChange={e => setAddQ(e.target.value)} 
+                                    onKeyDown={e => e.key === "Enter" && handleAddProperty()} 
+                                    placeholder="Enter EXACT PIN or TD Number..." 
+                                    style={{ flex: 1, padding: "8px" }}
+                                />
+                                <button className="btn btn-outline" onClick={handleAddProperty} disabled={addingProp}>
+                                    {addingProp ? "..." : "Add Property"}
+                                </button>
+                            </div>
+                        </div>
+                        {/* 🌟 END NEW COMPONENT */}
                         <div className="panel-title" style={{ marginBottom: 12, paddingBottom: 0 }}>Select Property</div>
                         {propList.length === 0
                             ? <div className="empty"><div className="empty-icon">🏠</div><div className="empty-text">No properties on record</div></div>

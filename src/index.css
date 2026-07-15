@@ -659,90 +659,91 @@ h2,
 }
 
 /* ---------------------------------------------------
-   AF-56 DOT MATRIX TEMPLATE STYLES
+   🖨️ AF-56 DOT MATRIX TEMPLATE STYLES
    --------------------------------------------------- */
 .af56-container {
-    /* 🌟 Apply the custom Landscape page ONLY to this container! */
     page: af56-landscape; 
-    
     position: relative;
-    width: 8.5in; /* Standard width of continuous form */
-    height: 5.5in; /* Standard height of half-page continuous form */
-    font-family: 'Courier New', Courier, monospace; /* Dot matrix best friend! */
-    font-size: 12px;
+    width: 9in; 
+    height: 5.5in; 
+    font-family: 'Courier New', Courier, monospace; 
+    font-size: 18px;
     font-weight: bold;
     color: black !important;
     background: transparent !important;
 }
 
-/* Force all text inside to be absolute black and pure data */
 .af56-data {
     position: absolute;
     white-space: nowrap;
 }
 
-/* 🎯 CALIBRATION CONTROLS: Change these inches (in) to move the text! */
-.absolute-date { top: 1.05in; left: 8.3in; }
-.absolute-payor { top: 1.3in; left: 2.7in; }
-.absolute-total { top: 4.3in; left: 7.2in; }
+/* 🎯 CALIBRATION CONTROLS */
+.absolute-date { top: 4.8in; left: 9in; }
+.absolute-payor { top: 5in; left: 4in; }
+.absolute-total { top: 8.6in; left: 9in; }
 .amount-in-words {
-    top: 1.3in; left: 6.15in;
-    width: 3.5in; /* 🌟 Make the box wide enough to span the physical form's blank line */
-    white-space: nowrap; /* 🌟 Forces the text to stay on a single horizontal line */
-    font-size: 8.4px; /* 🌟 Shrinks the text slightly so large amounts fit perfectly */
-    overflow: hidden; /* Prevents it from bleeding into the margins if it gets too long */
-    
-    /* Keep your existing top/left coordinates if you have them here! */
+    top: 5.1in; left: 7in;
+    width: 4.5in; 
+    white-space: nowrap; 
+    font-size: 11px; 
+    overflow: hidden; 
 }
 
-/* The Invisible Table Layout */
+/* 🌟 THE INVISIBLE RIGID GRID */
 .af56-table {
     position: absolute;
-    top: 2.4in; /* How far down the page the table starts */
-    left: 0.6in; /* How far from the left margin */
-    width: 9in;
+    top: 6.8in; 
+    left: 0.1in; 
+    width: 9.0in; /* Widened to give the money columns room to breathe */
     border: none !important;
     border-collapse: collapse;
-    
+    table-layout: fixed; /* 🌟 FORCES exact inch measurements */
 }
 
 .af56-table td {
     vertical-align: top !important; 
-    padding: 0px 0.05in; 
-    line-height: 1;
+    line-height: 0.9; /* Keeps rows tight vertically */
+    padding: 0; 
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
-    font-size: 10px !important;
+    font-size: 17px !important; 
 }
 
-/* 🎯 COLUMN WIDTHS: Adjust these to fit the physical boxes on the AF 56 */
-.col-owner { 
-    width: 1in; 
-    vertical-align: top !important;
-    white-space: nowrap; /* 🌟 Forces text to stay on 1 line */
-    overflow: hidden;    /* Prevents it from bleeding into the next column */
-}
-.col-loc { 
-    width: 1.15in; 
-    vertical-align: top !important;
-    white-space: nowrap; /* 🌟 Forces text to stay on 1 line */
-    overflow: hidden;
-}
-.col-pin { 
-    width: 1.4in; 
-    vertical-align: top !important;
-    white-space: nowrap; /* 🌟 Forces text to stay on 1 line */
-    overflow: hidden;
-}
-.col-av { width: 1.85in; text-align: right; }
-.col-year { width: 1.1in; text-align: center; }
-.col-money { width: 0.6in; text-align: right; }
-.col-tax-due {
-    width: 0.7in; /* Adjust this inch value to align it perfectly on your form */
-    text-align: right; /* Aligns the numbers to the right for a clean look */
+/* --- 1. THE LEFT SIDE --- */
+.col-owner { width: 1.4in; padding-right: 0.1in; white-space: nowrap; overflow: hidden; }
+.col-loc   { width: 0.9in; padding-right: 0.1in; white-space: nowrap; overflow: hidden; }
+.col-pin   { width: 3in; padding-right: 0.1in; white-space: nowrap; }
+
+/* 1. ASSESSED VALUE: Shrunk slightly to pull Tax Due closer */
+.col-av { 
+    width: 1.0in; /* 🌟 Was 1.1in. Shrunk by 0.1in */
+    text-align: right; 
+    padding-right: 0.1in;
 }
 
+/* 2. TAX DUE: Shrunk a lot to pull the Year much closer */
+.col-tax-due { 
+    width: 1.2in; /* 🌟 Was 1.2in. Shrunk by 0.5in to kill the wide gap! */
+    text-align: right; 
+    padding-right: 0.2in;
+}
+
+/* 3. YEAR: Widened to absorb the space we removed, keeping Money anchored! */
+.col-year { 
+    width: 1.2in; /* 🌟 Was 0.6in. We added the missing 0.6in here */
+    text-align: right; /* Anchors the text to the left side (near Tax Due) */
+    padding-left: 0.2in; 
+}
+
+/* --- 3. THE MONEY COLUMNS --- */
+/* 🌟 WIDENED to 0.8in so P354.20 and P255.02 stop overlapping */
+.col-money { 
+    width: 0.8in; 
+    text-align: right; 
+    padding-right: 0.05in; 
+}
 /* --- THEME VARIABLES --- */
 /* Default Light Mode */
 :root {

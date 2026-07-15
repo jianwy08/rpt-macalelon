@@ -1,4 +1,3 @@
-
 import { fmt } from "../utils/db";
 
 const formatDate = (dateString) => {
@@ -42,7 +41,7 @@ export default function PrintableReceipt({ data }) {
             
             {/* --- TOP HEADER SECTION --- */}
             {/* Municipality / Province */}
-            <div className="af56-data" style={{ top: "1.05in", left: "1.5in", fontSize: "14px", letterSpacing: "1px" }}>
+            <div className="af56-data" style={{ top: "4.8in", left: "2.5in", fontSize: "16px", letterSpacing: "1px" }}>
                 MACALELON, QUEZON
             </div>
 
@@ -61,39 +60,60 @@ export default function PrintableReceipt({ data }) {
                 {amountToWords(data.total_paid)} ({fmt(data.total_paid)})
             </div>
 
-            {/* --- INVISIBLE DATA TABLE --- */}
+          {/* --- INVISIBLE DATA TABLE --- */}
             <table className="af56-table">
                 <tbody>
                     {data.cart && data.cart.map((row, index) => {
-                        const prop = (data.properties && data.properties[0]) || {};
-                        const isBasic = row.type === 'BASIC';
+                        const prop = (data.properties && data.properties.find(p => p.id === row.property_id)) 
+                                     || data.property 
+                                     || (data.properties && data.properties[0]) 
+                                     || {};
+                        
+                        let isDuplicate = false;
+                        if (index > 0) {
+                            const prevRow = data.cart[index - 1];
+                            const prevProp = (data.properties && data.properties.find(p => p.id === prevRow.property_id)) 
+                                             || data.property 
+                                             || (data.properties && data.properties[0]) 
+                                             || {};
+                            
+                            if (prevProp.property_index_no === prop.property_index_no && prevRow.year === row.year) {
+                                isDuplicate = true; 
+                            }
+                        }
+                        
+                        const showInfo = !isDuplicate;
                         
                         return (
                             <tr key={index}>
-                                {/* Full Name mapping with Middle Initial */}
+                                {/* 1. Full Name */}
                                 <td className="col-owner">
-                                    {isBasic 
-                                        ? data.taxpayer 
-                                            ? `${data.taxpayer.firstname} ${data.taxpayer.middlename ? ' ' + data.taxpayer.middlename.charAt(0) + '.' : ''}${data.taxpayer.lastname}` 
-                                            : ""
+                                    {showInfo 
+                                        ? (data.taxpayer ? `${data.taxpayer.firstname} ${data.taxpayer.middlename ? ' ' + data.taxpayer.middlename.charAt(0) + '.' : ''}${data.taxpayer.lastname}` : "")
                                         : ""}
                                 </td>
-                                <td className="col-loc">{isBasic ? prop.barangay : ""}</td>
-                                <td className="col-pin">{isBasic ? (prop.property_index_no || prop.td_number) : ""}</td>
-                                <td className="col-av">{isBasic ? fmt(prop.assessed_value) : ""}</td>
                                 
-                                {/* 1% Tax Due Column */}
-                                <td className="col-tax-due">{isBasic ? fmt(prop.assessed_value * 0.01) : ""}</td>
+                                {/* 2. Location */}
+                                <td className="col-loc">{showInfo ? prop.barangay : ""}</td>
                                 
-                                <td className="col-year">{row.year}</td>
+                                {/* 3. PIN */}
+                                <td className="col-pin">{showInfo ? (prop.property_index_no || prop.td_number) : ""}</td>
                                 
-                                {/* Tax Type Label (Left blank to hide BASIC/SEF text) */}
-                                <td style={{ width: "0.5in" }}></td>
+                                {/* 4. AV */}
+                                <td className="col-av">{showInfo ? fmt(prop.assessed_value) : ""}</td>
+                                
+                                {/* 5. 1% Tax Due Column */}
+                                <td className="col-tax-due">{showInfo ? fmt(prop.assessed_value * 0.01) : ""}</td>
+                                
+                                {/* 6. Year */}
+                                <td className="col-year">{showInfo ? row.year : ""}</td>
+                                
+                                {/* 🌟 THE INVISIBLE 0.5in CELL WAS DELETED FROM HERE! 🌟 */}
 
-                                {/* Amount (Basic or SEF) */}
+                                {/* 7. Amount (Basic or SEF) */}
                                 <td className="col-money">{fmt(row.val)}</td>
                                 
-                                {/* Netted Penalty OR Discount Column */}
+                                {/* 8. Netted Penalty OR Discount Column */}
                                 <td className="col-money">
                                     {row.pen > row.disc 
                                         ? fmt(row.pen - row.disc) 
@@ -102,7 +122,7 @@ export default function PrintableReceipt({ data }) {
                                             : ""}
                                 </td>
 
-                                {/* Final Total Column */}
+                                {/* 9. Final Total Column */}
                                 <td className="col-money">
                                     {fmt(row.val + row.pen - row.disc)}
                                 </td>
@@ -110,22 +130,23 @@ export default function PrintableReceipt({ data }) {
                         );
                     })}
 
-                    {/* 🌟 NEW: Spacer row to push the totals down to the pre-printed bottom line */}
+                    {/* Spacer row to push the totals down to the pre-printed bottom line */}
                     <tr>
-                        <td colSpan="10" style={{ height: "0.9in" }}></td>
+                        {/* Changed colSpan from 10 to 9 because we deleted a column */}
+                        <td colSpan="9" style={{ height: "0.9in" }}></td>
                     </tr>
 
-                    {/* 🌟 NEW: The Totals Row */}
+                    {/* The Totals Row */}
                     <tr>
-                        {/* 7 empty columns to skip over the left-side text */}
-                        <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+                        {/* Exactly 6 empty columns to skip over the left-side text */}
+                        <td></td><td></td><td></td><td></td><td></td><td></td>
                         
-                        {/* 1. Total Basic + SEF */}
+                        {/* Total Basic + SEF */}
                         <td className="col-money" style={{ fontWeight: "bold" }}>
                             {fmt((data.basic_tax || 0) + (data.sef_tax || 0))}
                         </td>
                         
-                        {/* 2. Total Net Penalty / Discount */}
+                        {/* Total Net Penalty / Discount */}
                         <td className="col-money" style={{ fontWeight: "bold" }}>
                             {data.penalty > data.discount 
                                 ? fmt(data.penalty - data.discount) 
@@ -134,7 +155,7 @@ export default function PrintableReceipt({ data }) {
                                     : ""}
                         </td>
                         
-                        {/* 3. Grand Total */}
+                        {/* Grand Total */}
                         <td className="col-money" style={{ fontWeight: "bold" }}>
                             {fmt(data.total_paid)}
                         </td>
@@ -143,15 +164,13 @@ export default function PrintableReceipt({ data }) {
             </table>
 
             {/* --- BOTTOM SECTION & SIGNATORIES --- */}
-            {/* Notice the absolute-total div is gone! */}
-
             {/* Provincial / City Treasurer */}
-            <div className="af56-data" style={{ top: "3.9in", left: "7.6in", fontWeight: "bold" }}>
+            <div className="af56-data" style={{ top: "8.35in", left: "9.1in", fontWeight: "bold" }}>
                 ROSARIO MARILOU M. UY
             </div>
 
             {/* Deputy */}
-            <div className="af56-data" style={{ top: "4.3in", left: "7.8in", fontWeight: "bold" }}>
+            <div className="af56-data" style={{ top: "8.75in", left: "9.3in", fontWeight: "bold" }}>
                 DINIA A. TAÑEDO
             </div>
             
