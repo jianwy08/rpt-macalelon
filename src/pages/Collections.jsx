@@ -145,12 +145,15 @@ export default function Collection({ token, profile }) {
         try {
             const cleanQ = addQ.trim();
             // Strictly fetch exact match only to prevent adding the wrong property
-            const exactProp = await db.select("properties", { filter: `or=(property_index_no=eq.${cleanQ},td_number=eq.${cleanQ})`, limit: 1 }, token);
+            const exactProp = await db.select("properties", { 
+                filter: `or=(property_index_no.eq.${cleanQ},td_number.eq.${cleanQ})`, 
+                limit: 1 
+            }, token);
             
             if (exactProp.length) {
                 const newProp = exactProp[0];
                 
-                // Add to the visual list if it's not already there (e.g., owned by someone else)
+                // Add to the visual list if it's not already there 
                 if (!propList.find(p => p.id === newProp.id)) {
                     setPropList(prev => [...prev, newProp]);
                 }
@@ -164,7 +167,9 @@ export default function Collection({ token, profile }) {
             } else {
                 setErr("Property not found. Please enter an EXACT PIN or TD Number.");
             }
-        } catch(e) { setErr(e.message); }
+        } catch(e) { 
+            setErr(e.message); 
+        }
         setAddingProp(false);
     };
 
