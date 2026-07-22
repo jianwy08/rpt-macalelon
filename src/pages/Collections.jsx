@@ -81,20 +81,23 @@ export default function Collection({ token, profile }) {
             const cleanQ = q.trim();
             let matchedPropId = null; 
 
-            const exactPin = await db.select("properties", { filter: `property_index_no.eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
+            // 🌟 FIXED: Changed .eq. back to =eq. for direct, top-level filters
+            const exactPin = await db.select("properties", { filter: `property_index_no=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
             if (exactPin.length) {
                 matchedPropId = exactPin[0].id;
                 tp = await db.select("taxpayers", { filter: `id=eq.${exactPin[0].taxpayer_id}`, limit: 1 }, token);
             }
 
             if (!tp.length) {
-                const exactTd = await db.select("properties", { filter: `td_number.eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
+                // 🌟 FIXED: Changed .eq. back to =eq.
+                const exactTd = await db.select("properties", { filter: `td_number=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
                 if (exactTd.length) {
                     matchedPropId = exactTd[0].id;
                     tp = await db.select("taxpayers", { filter: `id=eq.${exactTd[0].taxpayer_id}`, limit: 1 }, token);
                 }
             }
 
+            // These stay the same because they are inside an or=(...) block!
             if (!tp.length) {
                 tp = await db.select("taxpayers", { filter: `or=(lastname.ilike.*${cleanQ}*,taxpayer_code.ilike.*${cleanQ}*)`, limit: 1 }, token);
             }
