@@ -18,6 +18,11 @@ export default function Collection({ token, profile }) {
     const [fromQuarter, setFromQuarter] = useState("1");
     const [toQuarter, setToQuarter] = useState("4");
 
+    // 🌟 1. NEW STATES FOR NIA / PARTIAL PAYMENTS
+    const [allowPartial, setAllowPartial] = useState(false);
+    const [partialRemarks, setPartialRemarks] = useState("");
+    const [overrides, setOverrides] = useState({});
+
     const [orNumber, setOrNumber] = useState("");
     const [paidBy, setPaidBy] = useState("");
     const [checkNo, setCheckNo] = useState("");
@@ -34,7 +39,6 @@ export default function Collection({ token, profile }) {
     const [addingProp, setAddingProp] = useState(false);
     const rd = (num) => Math.floor((parseFloat(num) || 0) * 100 + 0.0001) / 100;
 
-    // 🌟 1. FETCH ALL USERS FOR THE DROPDOWN
     useEffect(() => {
         const fetchCashiers = async () => {
             try {
@@ -46,7 +50,6 @@ export default function Collection({ token, profile }) {
         fetchCashiers();
     }, [profile, token]);
 
-    // 🌟 2. FETCH AF56 BOOKLET WHEN CASHIER IS SELECTED
     useEffect(() => {
         const fetchBooklet = async () => {
             if (!selectedCashier) return;
@@ -54,13 +57,13 @@ export default function Collection({ token, profile }) {
                 setNextOR("Loading...");
                 const forms = await db.select("accountable_forms", {
                     filter: `officer_name=eq.${selectedCashier.toUpperCase()}&status=eq.ACTIVE`,
-                    order: "date_issued.asc" // Gets the oldest active booklet first
+                    order: "date_issued.asc" 
                 }, token);
 
                 if (forms && forms.length > 0) {
                     setActiveBooklet(forms[0]);
                     setNextOR(String(forms[0].current_serial));
-                    setOrNumber(String(forms[0].current_serial)); // Syncs with your existing state!
+                    setOrNumber(String(forms[0].current_serial)); 
                 } else {
                     setActiveBooklet(null);
                     setNextOR("NO ACTIVE BOOKLET");
@@ -71,37 +74,21 @@ export default function Collection({ token, profile }) {
         fetchBooklet();
     }, [selectedCashier, token]);
 
-    // 🌟 NEW: Smart parser to understand exactly which quarters have been paid
-    const parseQuarters = (qStr) => {
-        if (!qStr || qStr === "FULL") return [1, 2, 3, 4];
-        if (qStr.includes("-")) {
-            const m = qStr.match(/Q(\d)-Q(\d)/);
-            if (m) {
-                let qs = [];
-                for (let i = parseInt(m[1]); i <= parseInt(m[2]); i++) qs.push(i);
-                return qs;
-            }
-        }
-        const m = qStr.match(/Q(\d)/);
-        if (m) return [parseInt(m[1])];
-        return [1, 2, 3, 4];
-    };
-
-   const search = async () => {
+    const search = async () => {
         setErr("");
         try {
             let tp = [];
             const cleanQ = q.trim();
-            let matchedPropId = null; // 🌟 NEW: Remembers the exact property searched
+            let matchedPropId = null; 
 
-            const exactPin = await db.select("properties", { filter: `property_index_no=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
+            const exactPin = await db.select("properties", { filter: `property_index_no.eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
             if (exactPin.length) {
                 matchedPropId = exactPin[0].id;
                 tp = await db.select("taxpayers", { filter: `id=eq.${exactPin[0].taxpayer_id}`, limit: 1 }, token);
             }
 
             if (!tp.length) {
-                const exactTd = await db.select("properties", { filter: `td_number=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
+                const exactTd = await db.select("properties", { filter: `td_number.eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
                 if (exactTd.length) {
                     matchedPropId = exactTd[0].id;
                     tp = await db.select("taxpayers", { filter: `id=eq.${exactTd[0].taxpayer_id}`, limit: 1 }, token);
@@ -120,14 +107,13 @@ export default function Collection({ token, profile }) {
                 }
             }
 
-            if (!tp.length) { setErr("Taxpayer or Property not found. Please check the spelling, PIN, or TD Number."); return; }
+            if (!tp.length) { setErr("Taxpayer or Property not found."); return; }
 
             setFound(tp[0]);
             setPaidBy(`${tp[0].firstname} ${tp[0].lastname}`);
             const ps = await db.select("properties", { filter: `taxpayer_id=eq.${tp[0].id}` }, token);
             setPropList(ps); 
             
-            // 🌟 NEW: Automatically check the box for the exact property searched!
             if (matchedPropId) {
                 const pToSelect = ps.find(p => p.id === matchedPropId);
                 if (pToSelect) setSelectedProps([pToSelect]);
@@ -139,12 +125,12 @@ export default function Collection({ token, profile }) {
             setStep(2);
         } catch (e) { setErr(e.message); }
     };
+
     const handleAddProperty = async () => {
         if (!addQ.trim()) return;
         setAddingProp(true); setErr("");
         try {
             const cleanQ = addQ.trim();
-            // Strictly fetch exact match only to prevent adding the wrong property
             const exactProp = await db.select("properties", { 
                 filter: `or=(property_index_no.eq.${cleanQ},td_number.eq.${cleanQ})`, 
                 limit: 1 
@@ -152,24 +138,17 @@ export default function Collection({ token, profile }) {
             
             if (exactProp.length) {
                 const newProp = exactProp[0];
-                
-                // Add to the visual list if it's not already there 
                 if (!propList.find(p => p.id === newProp.id)) {
                     setPropList(prev => [...prev, newProp]);
                 }
-                
-                // Automatically check its box!
                 if (!selectedProps.find(p => p.id === newProp.id)) {
                     setSelectedProps(prev => [...prev, newProp]);
                 }
-                
-                setAddQ(""); // Clear the search bar
+                setAddQ("");
             } else {
                 setErr("Property not found. Please enter an EXACT PIN or TD Number.");
             }
-        } catch(e) { 
-            setErr(e.message); 
-        }
+        } catch(e) { setErr(e.message); }
         setAddingProp(false);
     };
 
@@ -192,27 +171,26 @@ export default function Collection({ token, profile }) {
                 const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
                 const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
 
-                // 🌟 Map exact quarters paid
-                let paidQs = {}
+                // 🌟 2. NEW: TRACK EXACT MONEY PAID PER YEAR INSTEAD OF QUARTERS
+                let paidAmounts = {}; 
                 if (payments) {
                     payments.forEach(pay => {
                         const y = parseInt(pay.tax_year);
-                        if (!paidQs[y]) paidQs[y] = [];
-                        const qs = parseQuarters(pay.quarter);
-                        qs.forEach(q => { if (!paidQs[y].includes(q)) paidQs[y].push(q); });
+                        if (!paidAmounts[y]) paidAmounts[y] = { basic: 0, sef: 0 };
+                        paidAmounts[y].basic += parseFloat(pay.basic_tax) || 0;
+                        paidAmounts[y].sef += parseFloat(pay.sef_tax) || 0;
                     });
                 }
 
                 const delinqRecords = await db.select("delinquency", { filter: `property_id=eq.${p.id}&status=eq.UNPAID` }, token);
-
                 let startingYear = new Date().getFullYear();
                 if (delinqRecords && delinqRecords.length > 0) {
                     startingYear = Math.min(...delinqRecords.map(d => parseInt(d.tax_year)));
                 }
                 if (startingYear < globalMinYear) globalMinYear = startingYear;
 
-                // 🌟 FIXED: We strictly use paidQs now, yearsPaid is completely gone!
-                enrichedProps.push({ prop: p, history: history || [], paidQs: paidQs });
+                // Pass paidAmounts to the math engine
+                enrichedProps.push({ prop: p, history: history || [], paidAmounts });
             }
 
             setMultiPropData(enrichedProps);
@@ -223,6 +201,14 @@ export default function Collection({ token, profile }) {
         } catch (e) {
             setErr("Failed to load property data: " + e.message);
         }
+    };
+
+    // 🌟 HELPER TO HANDLE TYPING IN THE OVERRIDE BOXES
+    const handleOverrideChange = (year, field, value) => {
+        setOverrides(prev => ({
+            ...prev,
+            [year]: { ...prev[year], [field]: value }
+        }));
     };
 
     const payDateObj = new Date(paymentDate || today());
@@ -240,64 +226,54 @@ export default function Collection({ token, profile }) {
     for (let y = start; y <= end; y++) {
         let yearBasic = 0, yearSef = 0, yearPen = 0, yearDisc = 0;
         let allPaidThisYear = true;
+        let defaultRemainingBasic = 0;
+        let defaultRemainingSef = 0;
 
-        let startQ = (y === start) ? parseInt(fromQuarter) : 1;
-        let endQ = (y === end) ? parseInt(toQuarter) : 4;
-        if (y === start && y === end && startQ > endQ) { let temp = startQ; startQ = endQ; endQ = temp; }
-
-        const qCount = (endQ - startQ) + 1;
-        const qLabel = qCount === 4 ? "FULL" : (startQ === endQ ? `Q${startQ}` : `Q${startQ}-Q${endQ}`);
-        const displayLabel = qCount === 4 ? y : `${y} (${qLabel})`;
+        const displayLabel = y;
 
         for (const mp of multiPropData) {
-            // 🌟 FIXED: Filter out quarters that are already paid
-            const alreadyPaidQs = mp.paidQs?.[y] || [];
-            let quartersToPay = [];
-            for (let q = startQ; q <= endQ; q++) {
-                if (!alreadyPaidQs.includes(q)) quartersToPay.push(q);
+            const activeAsmt = mp.history.find(a => parseInt(a.tax_year) <= y);
+            const fullBasic = activeAsmt ? parseFloat(activeAsmt.basic_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
+            const fullSef = activeAsmt ? parseFloat(activeAsmt.sef_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
+
+            // 🌟 3. NEW: SUBTRACT ANY PREVIOUS PARTIAL PAYMENTS
+            const paidBasic = mp.paidAmounts?.[y]?.basic || 0;
+            const paidSef = mp.paidAmounts?.[y]?.sef || 0;
+
+            const remainingBasic = rd(fullBasic - paidBasic);
+            const remainingSef = rd(fullSef - paidSef);
+
+            // If balance is 0 or less, they are fully paid for this year
+            if (remainingBasic <= 0 && remainingSef <= 0) continue; 
+            
+            allPaidThisYear = false;
+            defaultRemainingBasic += remainingBasic;
+            defaultRemainingSef += remainingSef;
+
+            // Apply overrides if the user checked the partial payment box
+            let rowBasic = remainingBasic;
+            let rowSef = remainingSef;
+
+            if (allowPartial && overrides[y]) {
+                rowBasic = overrides[y].basic !== undefined ? parseFloat(overrides[y].basic) || 0 : remainingBasic;
+                rowSef = overrides[y].sef !== undefined ? parseFloat(overrides[y].sef) || 0 : remainingSef;
             }
 
-            // If the remaining array is empty, they truly paid for these specific quarters
-            if (quartersToPay.length === 0) continue;
-
-            allPaidThisYear = false;
-
-            const activeAsmt = mp.history.find(a => parseInt(a.tax_year) <= y);
-            const basicTax = activeAsmt ? parseFloat(activeAsmt.basic_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
-            const sefTax = activeAsmt ? parseFloat(activeAsmt.sef_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
-
-            const qBaseBasic = rd(basicTax / 4);
-            const qBaseSef = rd(sefTax / 4);
-            const getQBasic = (q) => q === 4 ? rd(basicTax - (qBaseBasic * 3)) : qBaseBasic;
-            const getQSef = (q) => q === 4 ? rd(sefTax - (qBaseSef * 3)) : qBaseSef;
-            const getQDue = (q) => rd(getQBasic(q) + getQSef(q));
-
-            let rowBasic = 0, rowSef = 0;
-
-            // 🌟 YOUR EXACT FIXED DISCOUNT LOGIC 🌟
             let rawDisc = 0;
             let rawPen = 0;
+            let totalDueRow = rowBasic + rowSef;
 
+            // Calculate penalties/discounts based on the exact amount they are paying right now
             if (y > currentYear) {
-                quartersToPay.forEach(q => {
-                    rowBasic += getQBasic(q); rowSef += getQSef(q);
-                    if (currentMonth <= 9) rawDisc += getQDue(q) * 0.15;
-                    else rawDisc += getQDue(q) * 0.10;
-                });
+                if (currentMonth <= 9) rawDisc = totalDueRow * 0.15;
+                else rawDisc = totalDueRow * 0.10;
             } else if (y < currentYear) {
                 const mosLate = ((currentYear - y) * 12) + currentMonth;
                 let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
-                quartersToPay.forEach(q => {
-                    rowBasic += getQBasic(q); rowSef += getQSef(q);
-                    rawPen += getQDue(q) * penaltyRate;
-                });
+                rawPen = totalDueRow * penaltyRate;
             } else {
-                quartersToPay.forEach(q => {
-                    rowBasic += getQBasic(q); rowSef += getQSef(q);
-                    const dueMo = q * 3;
-                    if (currentMonth <= dueMo) rawDisc += getQDue(q) * 0.10;
-                    else rawPen += getQDue(q) * Math.min(currentMonth * 0.02, 0.72);
-                });
+                if (currentMonth <= 3) rawDisc = totalDueRow * 0.10; 
+                else rawPen = totalDueRow * Math.min(currentMonth * 0.02, 0.72);
             }
 
             rowBasic = rd(rowBasic); rowSef = rd(rowSef);
@@ -306,7 +282,8 @@ export default function Collection({ token, profile }) {
 
             yearBasic += rowBasic; yearSef += rowSef; yearPen += rowPen; yearDisc += rowDisc;
 
-            dbCart.push({ property_id: mp.prop.id, assessment_id: activeAsmt?.id, year: y, quarterTag: qLabel, basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot });
+            // Notice we tag the quarter as "FULL" or "PARTIAL" because quarters no longer make sense here
+            dbCart.push({ property_id: mp.prop.id, assessment_id: activeAsmt?.id, year: y, quarterTag: allowPartial ? "PARTIAL" : "FULL", basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot });
         }
 
         if (allPaidThisYear) {
@@ -314,7 +291,12 @@ export default function Collection({ token, profile }) {
         } else {
             yearBasic = rd(yearBasic); yearSef = rd(yearSef); yearPen = rd(yearPen); yearDisc = rd(yearDisc);
             const yearTot = rd(yearBasic + yearSef - yearDisc + yearPen);
-            displayCart.push({ year: y, display: displayLabel, isPaid: false, basic: yearBasic, sef: yearSef, pen: yearPen, disc: yearDisc, total: yearTot });
+            
+            displayCart.push({ 
+                year: y, display: displayLabel, isPaid: false, 
+                basic: yearBasic, sef: yearSef, pen: yearPen, disc: yearDisc, total: yearTot,
+                defBasic: rd(defaultRemainingBasic), defSef: rd(defaultRemainingSef)
+            });
             tBasic += yearBasic; tSef += yearSef; tPen += yearPen; tDisc += yearDisc; gTotal += yearTot;
         }
     }
@@ -322,30 +304,25 @@ export default function Collection({ token, profile }) {
     gTotal = rd(gTotal);
 
     const post = async () => {
-        if (!activeBooklet) {
-            setErr(`Cannot post payment. ${selectedCashier} has no active AF56 booklets assigned.`);
-            return;
-        }
-        if (!orNumber.trim()) {
-            setErr("Official Receipt (OR) Number is required.");
-            return;
-        }
+        if (!activeBooklet) { setErr(`Cannot post payment. No active AF56 booklet.`); return; }
+        if (!orNumber.trim()) { setErr("OR Number is required."); return; }
+        // 🌟 FORCE REQUIRED REMARKS FOR PARTIAL PAYMENTS
+        if (allowPartial && !partialRemarks.trim()) { setErr("Remarks are required when overriding partial payments (e.g., 'Partial payment by NIA')."); return; }
 
         setPosting(true); setErr("");
         try {
             const mainOr = orNumber.trim();
 
-            // 🌟 FIXED: Forced null and 0 values to prevent PGRST102 key errors!
-          const rowsToInsert = dbCart.map((item) => ({
+            const rowsToInsert = dbCart.map((item) => ({
                 or_number: mainOr,
                 taxpayer_id: found.id,
                 property_id: item.property_id,
                 assessment_id: item.assessment_id || null,
                 tax_year: item.year,
                 payment_date: paymentDate,
-                remittance_date: remittanceDate, // 🌟 ADD THIS EXACT LINE
+                remittance_date: remittanceDate,
                 payment_method: method,
-                quarter: item.quarterTag || "FULL",
+                quarter: item.quarterTag,
                 basic_tax: item.basic || 0,
                 sef_tax: item.sef || 0,
                 idle_tax: 0,
@@ -355,39 +332,39 @@ export default function Collection({ token, profile }) {
                 cashier_id: profile?.id || null,
                 check_no: checkNo || null,
                 paid_by: paidBy ? paidBy.toUpperCase() : "UNKNOWN",
+                remarks: allowPartial ? partialRemarks : null // 🌟 SAVING REMARKS
             }));
 
             const insertedRows = await db.insert("collections", rowsToInsert, token);
             const col = insertedRows[0];
 
             await db.insert("official_receipts", { or_number: mainOr, collection_id: col.id, printed_by: profile?.id, print_count: 0 }, token);
-            // 🌟 ADVANCE THE AF56 BOOKLET SERIAL NUMBER
+            
             const nextSerialNum = activeBooklet.current_serial + 1;
             const isConsumed = nextSerialNum > activeBooklet.serial_to;
             await db.update("accountable_forms", 
                 { current_serial: nextSerialNum, status: isConsumed ? "CONSUMED" : "ACTIVE" }, 
                 { filter: `id=eq.${activeBooklet.id}` }, 
             token);
-            // 🌟 FIXED: Only mark the delinquency as PAID if they settle the 4th Quarter!
+            
+            // Only mark as fully paid if it wasn't a partial override
             for (const item of dbCart) {
-                if (item.quarterTag === "FULL" || item.quarterTag.includes("4")) {
+                if (!allowPartial) {
                     try {
                         await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${item.property_id}&tax_year=eq.${item.year}` }, token);
                     } catch (updateErr) {console.error(updateErr); }
                 }
             }
 
-            // 🌟 NEW: Extract the quarter tags and send them to the receipt
             const allQTags = Array.from(new Set(dbCart.map(c => c.quarterTag))).join(", ");
 
-            // Add cart: dbCart to the end!
-setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, quarter_str: allQTags, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer: found, properties: selectedProps, cashier: profile?.full_name, cart: dbCart });
+            setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, quarter_str: allQTags, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer: found, properties: selectedProps, cashier: profile?.full_name, cart: dbCart, remarks: allowPartial ? partialRemarks : "" });
             setStep(4);
         } catch (e) { setErr(e.message); }
         setPosting(false);
     };
 
-    const reset = () => { setStep(1); setFound(null); setPropList([]); setSelectedProps([]); setIssued(null); setQ(""); setErr(""); setOrNumber(""); setMultiPropData([]); };
+    const reset = () => { setStep(1); setFound(null); setPropList([]); setSelectedProps([]); setIssued(null); setQ(""); setErr(""); setOrNumber(""); setMultiPropData([]); setAllowPartial(false); setPartialRemarks(""); setOverrides({}); };
 
     if (step === 4 && issued) return (
         <div>
@@ -405,17 +382,14 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                             </div>
                             <div className="or-number">OFFICIAL RECEIPT NO. {issued.or_number}</div>
                             <div className="or-divider" />
-                            {/* 🌟 FIND this block and change today() to issued.payment_date */}
                             {[
                                 ["Date:", issued.payment_date],
                                 ["Taxpayer:", `${issued.taxpayer.lastname}, ${issued.taxpayer.firstname}`],
                                 ["Paid By:", issued.paid_by],
                                 ["Address:", issued.taxpayer.address || "—"],
                                 ["TD Number:", issued.properties?.map(p => p.td_number).join(", ") || "—"],
-
-                                /* 🌟 HERE IS THE UPDATED LINE! */
                                 ["Year & Qtr:", `${issued.tax_year} (${issued.quarter_str})`],
-
+                                ["Remarks:", issued.remarks || "—"], // 🌟 SHOW REMARKS ON SCREEN
                                 ["Payment:", issued.payment_method]
                             ].map(([k, v]) => (
                                 <div className="or-line" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
@@ -455,7 +429,6 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                             <button className="btn btn-outline" onClick={reset}>New Transaction</button>
                         </div>
                         
-                        {/* 🌟 NEW: Strict Print Isolation for the Epson Printer */}
                         <style>{`
                           @media screen {
                             .af56-print-area { display: none; }
@@ -491,7 +464,6 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
             </div>
             <div className="page-body">
 
-                {/* 🌟 CRASH FIX: Replaced React.Fragment with a native div */}
                 <div className="steps">
                     {[["1", "Search Taxpayer"], ["2", "Select Property"], ["3", "Compute & Pay"], ["4", "Receipt"]].map(([n, l], i) => (
                         <div key={n} style={{ display: "flex", alignItems: "center" }}>
@@ -527,7 +499,7 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                 ))}
                             </div>
                         </div>
-                        {/* 🌟 NEW: THE ADD PROPERTY COMPONENT */}
+                        
                         <div className="panel" style={{ maxWidth: 520, marginBottom: 16, background: "var(--bg2)", border: "1px dashed var(--blue)" }}>
                             <div style={{ fontSize: 13, fontWeight: "bold", color: "var(--blue2)", marginBottom: 8 }}>✚ Add Another Property to this Receipt</div>
                             <div style={{ display: "flex", gap: "8px" }}>
@@ -544,7 +516,7 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                 </button>
                             </div>
                         </div>
-                        {/* 🌟 END NEW COMPONENT */}
+                        
                         <div className="panel-title" style={{ marginBottom: 12, paddingBottom: 0 }}>Select Property</div>
                         {propList.length === 0
                             ? <div className="empty"><div className="empty-icon">🏠</div><div className="empty-text">No properties on record</div></div>
@@ -569,7 +541,6 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                 {step === 3 && selectedProps.length > 0 && (
                     <div className="two-col">
                         <div>
-
                             {firstUnpaidYear < new Date().getFullYear() && (
                                 <div className="banner banner-err" style={{ marginBottom: "16px" }}>
                                     <span className="banner-icon">⚖️</span>
@@ -633,11 +604,8 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                                     cursor: firstUnpaidYear < new Date().getFullYear() ? "not-allowed" : "text"
                                                 }}
                                             />
-                                            <select value={fromQuarter} onChange={e => setFromQuarter(e.target.value)} style={{ flex: 1 }}>
-                                                <option value="1">Q1 (Jan-Mar)</option>
-                                                <option value="2">Q2 (Apr-Jun)</option>
-                                                <option value="3">Q3 (Jul-Sep)</option>
-                                                <option value="4">Q4 (Oct-Dec)</option>
+                                            <select value={fromQuarter} onChange={e => setFromQuarter(e.target.value)} style={{ flex: 1, display: "none" }}>
+                                                {/* Quarters hidden since we use a balance-based system now */}
                                             </select>
                                         </div>
                                     </div>
@@ -646,11 +614,8 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                         <label className="form-label">To</label>
                                         <div style={{ display: "flex", gap: "8px" }}>
                                             <input type="number" value={toYear} onChange={(e) => setToYear(e.target.value)} min={fromYear} max={new Date().getFullYear() + 5} style={{ width: "80px", padding: "10px 8px", textAlign: "center" }} />
-                                            <select value={toQuarter} onChange={e => setToQuarter(e.target.value)} style={{ flex: 1 }}>
-                                                <option value="1">Q1 (Jan-Mar)</option>
-                                                <option value="2">Q2 (Apr-Jun)</option>
-                                                <option value="3">Q3 (Jul-Sep)</option>
-                                                <option value="4">Q4 (Oct-Dec)</option>
+                                            <select value={toQuarter} onChange={e => setToQuarter(e.target.value)} style={{ flex: 1, display: "none" }}>
+                                                {/* Quarters hidden */}
                                             </select>
                                         </div>
                                     </div>
@@ -667,7 +632,7 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                         </div>
                                     )}
                                     <div className="form-group">
-                                        <label className="form-label" style={{ color: "var(--blue2)", fontWeight: "bold" }}>Actual Date Paid (For Encoding)</label>
+                                        <label className="form-label" style={{ color: "var(--blue2)", fontWeight: "bold" }}>Actual Date Paid</label>
                                         <input
                                             type="date"
                                             value={paymentDate}
@@ -677,7 +642,6 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                         />
                                     </div>
 
-                                    {/* 🌟 NEW: THE REMITTANCE DATE PICKER */}
                                     <div className="form-group">
                                         <label className="form-label" style={{ color: "var(--gold2)", fontWeight: "bold" }}>Remittance / RCD Date</label>
                                         <input
@@ -690,7 +654,6 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                             Change this to tomorrow for after-cutoff payments!
                                         </div>
                                     </div>
-                                    {/* 🌟 END OF NEW BLOCK */}
 
                                     <div className="form-group span2" style={{ marginTop: "8px" }}>
                                         <label className="form-label">Paid By (Actual person paying)</label>
@@ -700,7 +663,21 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
                                             placeholder="e.g. Maria Santos (Sister) or Juan Dela Cruz (Son)"
                                         />
                                     </div>
+                                </div>
 
+                                {/* 🌟 4. NEW: THE PARTIAL OVERRIDE TOGGLE */}
+                                <div style={{ marginTop: "24px", padding: "16px", background: "rgba(220, 38, 38, 0.05)", borderRadius: "8px", border: "1px dashed var(--red2)" }}>
+                                    <label style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", cursor: "pointer", color: "var(--red2)" }}>
+                                        <input type="checkbox" checked={allowPartial} onChange={e => setAllowPartial(e.target.checked)} style={{ width: "20px", height: "20px" }} />
+                                        ENABLE PARTIAL PAYMENT OVERRIDE (e.g., For NIA / Subdivisions)
+                                    </label>
+                                    
+                                    {allowPartial && (
+                                        <div className="form-group" style={{ marginTop: "12px" }}>
+                                            <label className="form-label">Required Remarks for Partial Payment (Prints on OR)</label>
+                                            <input className="input" value={partialRemarks} onChange={e => setPartialRemarks(e.target.value)} placeholder="e.g. Partial payment for 2,000 sqm acquired by NIA..." style={{ border: "2px solid var(--red2)" }} />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -718,12 +695,21 @@ setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidB
 
                                                     {c.isPaid ? (
                                                         <td colSpan="4" style={{ textAlign: "center", fontSize: "12px", color: "var(--green2)", fontWeight: 700, letterSpacing: "1px" }}>
-                                                            ALREADY PAID
+                                                            ALREADY FULLY PAID
                                                         </td>
                                                     ) : (
                                                         <>
-                                                            <td>{fmt(c.basic)}</td>
-                                                            <td>{fmt(c.sef)}</td>
+                                                            {/* 🌟 5. NEW: EDITABLE BASIC AND SEF FIELDS */}
+                                                            <td>
+                                                                {allowPartial ? (
+                                                                    <input type="number" value={overrides[c.year]?.basic ?? c.defBasic} onChange={e => handleOverrideChange(c.year, 'basic', e.target.value)} style={{ width: "70px", padding: "4px", border: "1px solid var(--red2)", fontWeight: "bold" }} />
+                                                                ) : fmt(c.basic)}
+                                                            </td>
+                                                            <td>
+                                                                {allowPartial ? (
+                                                                    <input type="number" value={overrides[c.year]?.sef ?? c.defSef} onChange={e => handleOverrideChange(c.year, 'sef', e.target.value)} style={{ width: "70px", padding: "4px", border: "1px solid var(--red2)", fontWeight: "bold" }} />
+                                                                ) : fmt(c.sef)}
+                                                            </td>
                                                             <td style={{ color: c.disc > 0 ? 'var(--green2)' : c.pen > 0 ? 'var(--red2)' : 'inherit' }}>
                                                                 {c.disc > 0 ? `-${fmt(c.disc)}` : c.pen > 0 ? `+${fmt(c.pen)}` : "—"}
                                                             </td>

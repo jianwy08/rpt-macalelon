@@ -708,13 +708,35 @@ h2,
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
-    font-size: 17px !important; 
+    font-size: 14px !important; 
 }
 
 /* --- 1. THE LEFT SIDE --- */
-.col-owner { width: 1.4in; padding-right: 0.1in; white-space: nowrap; overflow: hidden; }
-.col-loc   { width: 0.9in; padding-right: 0.1in; white-space: nowrap; overflow: hidden; }
-.col-pin   { width: 3in; padding-right: 0.1in; white-space: nowrap; }
+/* 🌟 FIXED: Allowed text to wrap to the next line and reduced font size so it doesn't push the row down! */
+.col-owner { 
+    width: 1.4in; 
+    padding-right: 0.1in; 
+    white-space: normal; 
+    word-wrap: break-word; 
+    font-size: 12px !important; 
+    line-height: 0.9; 
+}
+
+.col-loc { 
+    width: 0.9in; 
+    padding-right: 0.1in; 
+    white-space: normal; 
+    word-wrap: break-word; 
+    font-size: 12px !important; 
+    line-height: 0.9; 
+}
+
+/* We leave the PIN as nowrap because we do not want the number to break in half */
+.col-pin { 
+    width: 3in; 
+    padding-right: 0.1in; 
+    white-space: nowrap; 
+}
 
 /* 1. ASSESSED VALUE: Shrunk slightly to pull Tax Due closer */
 .col-av { 
