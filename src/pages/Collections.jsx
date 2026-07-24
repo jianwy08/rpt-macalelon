@@ -15,10 +15,11 @@ export default function Collection({ token, profile }) {
     const [fromYear, setFromYear] = useState(String(new Date().getFullYear()));
     const [toYear, setToYear] = useState(String(new Date().getFullYear()));
     const [method, setMethod] = useState("CASH");
+    
+    // 🌟 RESTORED: QUARTER STATES
     const [fromQuarter, setFromQuarter] = useState("1");
     const [toQuarter, setToQuarter] = useState("4");
 
-    // 🌟 1. NEW STATES FOR NIA / PARTIAL PAYMENTS
     const [allowPartial, setAllowPartial] = useState(false);
     const [partialRemarks, setPartialRemarks] = useState("");
     const [overrides, setOverrides] = useState({});
@@ -74,6 +75,22 @@ export default function Collection({ token, profile }) {
         fetchBooklet();
     }, [selectedCashier, token]);
 
+    // 🌟 RESTORED: QUARTER PARSER
+    const parseQuarters = (qStr) => {
+        if (!qStr || qStr === "FULL") return [1, 2, 3, 4];
+        if (qStr.includes("-")) {
+            const m = qStr.match(/Q(\d)-Q(\d)/);
+            if (m) {
+                let qs = [];
+                for (let i = parseInt(m[1]); i <= parseInt(m[2]); i++) qs.push(i);
+                return qs;
+            }
+        }
+        const m = qStr.match(/Q(\d)/);
+        if (m) return [parseInt(m[1])];
+        return [1, 2, 3, 4];
+    };
+
     const search = async () => {
         setErr("");
         try {
@@ -81,7 +98,6 @@ export default function Collection({ token, profile }) {
             const cleanQ = q.trim();
             let matchedPropId = null; 
 
-            // 🌟 FIXED: Changed .eq. back to =eq. for direct, top-level filters
             const exactPin = await db.select("properties", { filter: `property_index_no=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
             if (exactPin.length) {
                 matchedPropId = exactPin[0].id;
@@ -89,7 +105,6 @@ export default function Collection({ token, profile }) {
             }
 
             if (!tp.length) {
-                // 🌟 FIXED: Changed .eq. back to =eq.
                 const exactTd = await db.select("properties", { filter: `td_number=eq.${cleanQ}`, select: "id, taxpayer_id", limit: 1 }, token);
                 if (exactTd.length) {
                     matchedPropId = exactTd[0].id;
@@ -97,7 +112,6 @@ export default function Collection({ token, profile }) {
                 }
             }
 
-            // These stay the same because they are inside an or=(...) block!
             if (!tp.length) {
                 tp = await db.select("taxpayers", { filter: `or=(lastname.ilike.*${cleanQ}*,taxpayer_code.ilike.*${cleanQ}*)`, limit: 1 }, token);
             }
@@ -174,14 +188,21 @@ export default function Collection({ token, profile }) {
                 const history = await db.select("assessments", { filter: `property_id=eq.${p.id}`, order: "tax_year.desc" }, token);
                 const payments = await db.select("collections", { filter: `property_id=eq.${p.id}&is_voided=eq.false` }, token);
 
-                // 🌟 2. NEW: TRACK EXACT MONEY PAID PER YEAR INSTEAD OF QUARTERS
                 let paidAmounts = {}; 
+                let paidQs = {}; 
+
                 if (payments) {
                     payments.forEach(pay => {
                         const y = parseInt(pay.tax_year);
+                        // Track total balance paid (For NIA override)
                         if (!paidAmounts[y]) paidAmounts[y] = { basic: 0, sef: 0 };
                         paidAmounts[y].basic += parseFloat(pay.basic_tax) || 0;
                         paidAmounts[y].sef += parseFloat(pay.sef_tax) || 0;
+                        
+                        // Track exact quarters paid (For Standard Quarters)
+                        if (!paidQs[y]) paidQs[y] = [];
+                        const qs = parseQuarters(pay.quarter);
+                        qs.forEach(q => { if (!paidQs[y].includes(q)) paidQs[y].push(q); });
                     });
                 }
 
@@ -192,8 +213,7 @@ export default function Collection({ token, profile }) {
                 }
                 if (startingYear < globalMinYear) globalMinYear = startingYear;
 
-                // Pass paidAmounts to the math engine
-                enrichedProps.push({ prop: p, history: history || [], paidAmounts });
+                enrichedProps.push({ prop: p, history: history || [], paidAmounts, paidQs });
             }
 
             setMultiPropData(enrichedProps);
@@ -206,7 +226,6 @@ export default function Collection({ token, profile }) {
         }
     };
 
-    // 🌟 HELPER TO HANDLE TYPING IN THE OVERRIDE BOXES
     const handleOverrideChange = (year, field, value) => {
         setOverrides(prev => ({
             ...prev,
@@ -232,51 +251,87 @@ export default function Collection({ token, profile }) {
         let defaultRemainingBasic = 0;
         let defaultRemainingSef = 0;
 
-        const displayLabel = y;
+        let startQ = (y === start) ? parseInt(fromQuarter) : 1;
+        let endQ = (y === end) ? parseInt(toQuarter) : 4;
+        if (y === start && y === end && startQ > endQ) { let temp = startQ; startQ = endQ; endQ = temp; }
 
         for (const mp of multiPropData) {
             const activeAsmt = mp.history.find(a => parseInt(a.tax_year) <= y);
             const fullBasic = activeAsmt ? parseFloat(activeAsmt.basic_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
             const fullSef = activeAsmt ? parseFloat(activeAsmt.sef_tax) : rd(parseFloat(mp.prop.assessed_value) * 0.01);
 
-            // 🌟 3. NEW: SUBTRACT ANY PREVIOUS PARTIAL PAYMENTS
             const paidBasic = mp.paidAmounts?.[y]?.basic || 0;
             const paidSef = mp.paidAmounts?.[y]?.sef || 0;
 
             const remainingBasic = rd(fullBasic - paidBasic);
             const remainingSef = rd(fullSef - paidSef);
 
-            // If balance is 0 or less, they are fully paid for this year
             if (remainingBasic <= 0 && remainingSef <= 0) continue; 
             
-            allPaidThisYear = false;
-            defaultRemainingBasic += remainingBasic;
-            defaultRemainingSef += remainingSef;
+            let rowBasic = 0, rowSef = 0, rawDisc = 0, rawPen = 0;
+            let qLabel;
 
-            // Apply overrides if the user checked the partial payment box
-            let rowBasic = remainingBasic;
-            let rowSef = remainingSef;
+            if (allowPartial) {
+                // 🌟 MODE 1: NIA / PARTIAL OVERRIDE MODE (Ignores Quarters)
+                allPaidThisYear = false;
+                defaultRemainingBasic += remainingBasic;
+                defaultRemainingSef += remainingSef;
+                qLabel = "PARTIAL";
 
-            if (allowPartial && overrides[y]) {
-                rowBasic = overrides[y].basic !== undefined ? parseFloat(overrides[y].basic) || 0 : remainingBasic;
-                rowSef = overrides[y].sef !== undefined ? parseFloat(overrides[y].sef) || 0 : remainingSef;
-            }
+                rowBasic = overrides[y] && overrides[y].basic !== undefined ? parseFloat(overrides[y].basic) || 0 : remainingBasic;
+                rowSef = overrides[y] && overrides[y].sef !== undefined ? parseFloat(overrides[y].sef) || 0 : remainingSef;
 
-            let rawDisc = 0;
-            let rawPen = 0;
-            let totalDueRow = rowBasic + rowSef;
+                let totalDueRow = rowBasic + rowSef;
+                if (y > currentYear) {
+                    rawDisc = totalDueRow * (currentMonth <= 9 ? 0.15 : 0.10);
+                } else if (y < currentYear) {
+                    const mosLate = ((currentYear - y) * 12) + currentMonth;
+                    let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
+                    rawPen = totalDueRow * penaltyRate;
+                } else {
+                    if (currentMonth <= 3) rawDisc = totalDueRow * 0.10; 
+                    else rawPen = totalDueRow * Math.min(currentMonth * 0.02, 0.72);
+                }
 
-            // Calculate penalties/discounts based on the exact amount they are paying right now
-            if (y > currentYear) {
-                if (currentMonth <= 9) rawDisc = totalDueRow * 0.15;
-                else rawDisc = totalDueRow * 0.10;
-            } else if (y < currentYear) {
-                const mosLate = ((currentYear - y) * 12) + currentMonth;
-                let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
-                rawPen = totalDueRow * penaltyRate;
             } else {
-                if (currentMonth <= 3) rawDisc = totalDueRow * 0.10; 
-                else rawPen = totalDueRow * Math.min(currentMonth * 0.02, 0.72);
+                // 🌟 MODE 2: STANDARD QUARTERLY MODE (Strict Q1-Q4)
+                const alreadyPaidQs = mp.paidQs?.[y] || [];
+                let quartersToPay = [];
+                for (let q = startQ; q <= endQ; q++) {
+                    if (!alreadyPaidQs.includes(q)) quartersToPay.push(q);
+                }
+                
+                if (quartersToPay.length === 0) continue; // Skip if they already paid these specific quarters
+                allPaidThisYear = false;
+
+                const qCount = quartersToPay.length;
+                qLabel = qCount === 4 ? "FULL" : (qCount === 1 ? `Q${quartersToPay[0]}` : `Q${quartersToPay[0]}-Q${quartersToPay[quartersToPay.length-1]}`);
+
+                const qBaseBasic = rd(fullBasic / 4);
+                const qBaseSef = rd(fullSef / 4);
+                const getQBasic = (q) => q === 4 ? rd(fullBasic - (qBaseBasic * 3)) : qBaseBasic;
+                const getQSef = (q) => q === 4 ? rd(fullSef - (qBaseSef * 3)) : qBaseSef;
+                const getQDue = (q) => rd(getQBasic(q) + getQSef(q));
+
+                quartersToPay.forEach(q => {
+                    rowBasic += getQBasic(q); 
+                    rowSef += getQSef(q);
+                    if (y > currentYear) {
+                        if (currentMonth <= 9) rawDisc += getQDue(q) * 0.15;
+                        else rawDisc += getQDue(q) * 0.10;
+                    } else if (y < currentYear) {
+                        const mosLate = ((currentYear - y) * 12) + currentMonth;
+                        let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
+                        rawPen += getQDue(q) * penaltyRate;
+                    } else {
+                        const dueMo = q * 3;
+                        if (currentMonth <= dueMo) rawDisc += getQDue(q) * 0.10;
+                        else rawPen += getQDue(q) * Math.min(currentMonth * 0.02, 0.72);
+                    }
+                });
+
+                defaultRemainingBasic += rowBasic;
+                defaultRemainingSef += rowSef;
             }
 
             rowBasic = rd(rowBasic); rowSef = rd(rowSef);
@@ -285,9 +340,11 @@ export default function Collection({ token, profile }) {
 
             yearBasic += rowBasic; yearSef += rowSef; yearPen += rowPen; yearDisc += rowDisc;
 
-            // Notice we tag the quarter as "FULL" or "PARTIAL" because quarters no longer make sense here
-            dbCart.push({ property_id: mp.prop.id, assessment_id: activeAsmt?.id, year: y, quarterTag: allowPartial ? "PARTIAL" : "FULL", basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot });
+            dbCart.push({ property_id: mp.prop.id, assessment_id: activeAsmt?.id, year: y, quarterTag: qLabel, basic: rowBasic, sef: rowSef, pen: rowPen, disc: rowDisc, total: rowTot });
         }
+
+        const qLabelDisplay = allowPartial ? "Override" : (startQ === endQ ? `Q${startQ}` : `Q${startQ}-Q${endQ}`);
+        const displayLabel = allowPartial ? `${y} (Override)` : (startQ === 1 && endQ === 4 ? y : `${y} (${qLabelDisplay})`);
 
         if (allPaidThisYear) {
             displayCart.push({ year: y, display: displayLabel, isPaid: true });
@@ -309,7 +366,6 @@ export default function Collection({ token, profile }) {
     const post = async () => {
         if (!activeBooklet) { setErr(`Cannot post payment. No active AF56 booklet.`); return; }
         if (!orNumber.trim()) { setErr("OR Number is required."); return; }
-        // 🌟 FORCE REQUIRED REMARKS FOR PARTIAL PAYMENTS
         if (allowPartial && !partialRemarks.trim()) { setErr("Remarks are required when overriding partial payments (e.g., 'Partial payment by NIA')."); return; }
 
         setPosting(true); setErr("");
@@ -335,7 +391,7 @@ export default function Collection({ token, profile }) {
                 cashier_id: profile?.id || null,
                 check_no: checkNo || null,
                 paid_by: paidBy ? paidBy.toUpperCase() : "UNKNOWN",
-                remarks: allowPartial ? partialRemarks : null // 🌟 SAVING REMARKS
+                remarks: allowPartial ? partialRemarks : null 
             }));
 
             const insertedRows = await db.insert("collections", rowsToInsert, token);
@@ -350,9 +406,9 @@ export default function Collection({ token, profile }) {
                 { filter: `id=eq.${activeBooklet.id}` }, 
             token);
             
-            // Only mark as fully paid if it wasn't a partial override
+            // Only mark delinquency PAID if it's standard mode and includes Q4
             for (const item of dbCart) {
-                if (!allowPartial) {
+                if (!allowPartial && (item.quarterTag === "FULL" || item.quarterTag.includes("4"))) {
                     try {
                         await db.update("delinquency", { status: "PAID" }, { filter: `property_id=eq.${item.property_id}&tax_year=eq.${item.year}` }, token);
                     } catch (updateErr) {console.error(updateErr); }
@@ -392,7 +448,7 @@ export default function Collection({ token, profile }) {
                                 ["Address:", issued.taxpayer.address || "—"],
                                 ["TD Number:", issued.properties?.map(p => p.td_number).join(", ") || "—"],
                                 ["Year & Qtr:", `${issued.tax_year} (${issued.quarter_str})`],
-                                ["Remarks:", issued.remarks || "—"], // 🌟 SHOW REMARKS ON SCREEN
+                                ["Remarks:", issued.remarks || "—"],
                                 ["Payment:", issued.payment_method]
                             ].map(([k, v]) => (
                                 <div className="or-line" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
@@ -607,8 +663,12 @@ export default function Collection({ token, profile }) {
                                                     cursor: firstUnpaidYear < new Date().getFullYear() ? "not-allowed" : "text"
                                                 }}
                                             />
-                                            <select value={fromQuarter} onChange={e => setFromQuarter(e.target.value)} style={{ flex: 1, display: "none" }}>
-                                                {/* Quarters hidden since we use a balance-based system now */}
+                                            {/* 🌟 RESTORED: From Quarter Dropdown! */}
+                                            <select value={fromQuarter} onChange={e => setFromQuarter(e.target.value)} style={{ flex: 1 }} disabled={allowPartial}>
+                                                <option value="1">Q1 (Jan-Mar)</option>
+                                                <option value="2">Q2 (Apr-Jun)</option>
+                                                <option value="3">Q3 (Jul-Sep)</option>
+                                                <option value="4">Q4 (Oct-Dec)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -617,8 +677,12 @@ export default function Collection({ token, profile }) {
                                         <label className="form-label">To</label>
                                         <div style={{ display: "flex", gap: "8px" }}>
                                             <input type="number" value={toYear} onChange={(e) => setToYear(e.target.value)} min={fromYear} max={new Date().getFullYear() + 5} style={{ width: "80px", padding: "10px 8px", textAlign: "center" }} />
-                                            <select value={toQuarter} onChange={e => setToQuarter(e.target.value)} style={{ flex: 1, display: "none" }}>
-                                                {/* Quarters hidden */}
+                                            {/* 🌟 RESTORED: To Quarter Dropdown! */}
+                                            <select value={toQuarter} onChange={e => setToQuarter(e.target.value)} style={{ flex: 1 }} disabled={allowPartial}>
+                                                <option value="1">Q1 (Jan-Mar)</option>
+                                                <option value="2">Q2 (Apr-Jun)</option>
+                                                <option value="3">Q3 (Jul-Sep)</option>
+                                                <option value="4">Q4 (Oct-Dec)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -668,7 +732,6 @@ export default function Collection({ token, profile }) {
                                     </div>
                                 </div>
 
-                                {/* 🌟 4. NEW: THE PARTIAL OVERRIDE TOGGLE */}
                                 <div style={{ marginTop: "24px", padding: "16px", background: "rgba(220, 38, 38, 0.05)", borderRadius: "8px", border: "1px dashed var(--red2)" }}>
                                     <label style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold", cursor: "pointer", color: "var(--red2)" }}>
                                         <input type="checkbox" checked={allowPartial} onChange={e => setAllowPartial(e.target.checked)} style={{ width: "20px", height: "20px" }} />
@@ -702,7 +765,6 @@ export default function Collection({ token, profile }) {
                                                         </td>
                                                     ) : (
                                                         <>
-                                                            {/* 🌟 5. NEW: EDITABLE BASIC AND SEF FIELDS */}
                                                             <td>
                                                                 {allowPartial ? (
                                                                     <input type="number" value={overrides[c.year]?.basic ?? c.defBasic} onChange={e => handleOverrideChange(c.year, 'basic', e.target.value)} style={{ width: "70px", padding: "4px", border: "1px solid var(--red2)", fontWeight: "bold" }} />
