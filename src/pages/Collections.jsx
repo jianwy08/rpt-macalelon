@@ -266,7 +266,7 @@ export default function Collection({ token, profile }) {
             const remainingBasic = rd(fullBasic - paidBasic);
             const remainingSef = rd(fullSef - paidSef);
 
-            if (remainingBasic <= 0 && remainingSef <= 0) continue; 
+            if (remainingBasic <= 0 && remainingSef <= 0 && !allowPartial) continue;
             
             let rowBasic = 0, rowSef = 0, rawDisc = 0, rawPen = 0;
             let qLabel;
@@ -367,7 +367,11 @@ export default function Collection({ token, profile }) {
         if (!activeBooklet) { setErr(`Cannot post payment. No active AF56 booklet.`); return; }
         if (!orNumber.trim()) { setErr("OR Number is required."); return; }
         if (allowPartial && !partialRemarks.trim()) { setErr("Remarks are required when overriding partial payments (e.g., 'Partial payment by NIA')."); return; }
-
+        // 🌟 NEW SAFETY LOCK TO PREVENT UNDEFINED 'ID' CRASH
+        if (dbCart.length === 0 || gTotal <= 0) {
+            setErr("Cannot post a blank receipt. Please enter an amount to process the double payment.");
+            return;
+        }
         setPosting(true); setErr("");
         try {
             const mainOr = orNumber.trim();
@@ -811,7 +815,7 @@ export default function Collection({ token, profile }) {
                                     <span className="cv" style={{ fontSize: 18 }}>{fmt(gTotal)}</span>
                                 </div>
                                 <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-                                    <button className="btn btn-success" onClick={post} disabled={posting}>{posting ? <><span className="spin" />&nbsp;Posting…</> : "✓ Post Payment & Issue OR"}</button>
+                                    <button className="btn btn-success" onClick={post} disabled={posting || gTotal <= 0}>{posting ? <><span className="spin" />&nbsp;Posting…</> : "✓ Post Payment & Issue OR"}</button>
                                     <button className="btn btn-ghost" onClick={() => setStep(2)}>← Back</button>
                                 </div>
                             </div>
