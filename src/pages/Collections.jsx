@@ -742,6 +742,24 @@ export default function Collection({ token, profile }) {
                                         <div className="form-group" style={{ marginTop: "12px" }}>
                                             <label className="form-label">Required Remarks for Partial Payment (Prints on OR)</label>
                                             <input className="input" value={partialRemarks} onChange={e => setPartialRemarks(e.target.value)} placeholder="e.g. Partial payment for 2,000 sqm acquired by NIA..." style={{ border: "2px solid var(--red2)" }} />
+                                           <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                                                <button 
+                                                    type="button" 
+                                                    className="btn btn-outline" 
+                                                    style={{ fontSize: "11px", padding: "4px 8px" }}
+                                                    onClick={() => setPartialRemarks("DOUBLE PAYMENT")}
+                                                >
+                                                    Quick Fill: Double Payment
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    className="btn btn-outline" 
+                                                    style={{ fontSize: "11px", padding: "4px 8px" }}
+                                                    onClick={() => setPartialRemarks("PARTIAL PAYMENT FOR NIA")}
+                                                >
+                                                    Quick Fill: NIA
+                                                </button>
+                                            </div> 
                                         </div>
                                     )}
                                 </div>
