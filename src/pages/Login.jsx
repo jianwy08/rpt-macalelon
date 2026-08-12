@@ -164,7 +164,7 @@ export default function Login({ onLogin, onOpenKiosk }) {
                 </div>
 
                 {/* KIOSK BUTTON FOR PUBLIC */}
-                <div style={{ marginTop: "24px", borderTop: "1px solid var(--border)", paddingTop: "16px", textAlign: "center" }}>
+                {/* <div style={{ marginTop: "24px", borderTop: "1px solid var(--border)", paddingTop: "16px", textAlign: "center" }}>
                     <p style={{ color: "var(--text3)", fontSize: "12px", marginBottom: "8px" }}>For Public Inquiries</p>
                     <button
                         onClick={onOpenKiosk}
@@ -172,7 +172,7 @@ export default function Login({ onLogin, onOpenKiosk }) {
                     >
                         🖥️ Open Self-Service Kiosk
                     </button>
-                </div>
+                </div> */}
 
             </div>
         </div>
