@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { db, supabase } from "../utils/db";
+// 🌟 1. IMPORT TURNSTILE
+import { Turnstile } from '@marsidev/react-turnstile';
 
 export default function Login({ onLogin, onOpenKiosk }) {
     const [email, setEmail] = useState("");
@@ -10,20 +12,30 @@ export default function Login({ onLogin, onOpenKiosk }) {
     const [mfaCode, setMfaCode] = useState("");
     const [mfaFactorId, setMfaFactorId] = useState("");
 
+    // 🌟 2. NEW STATES FOR CAPTCHA
+    const [captchaToken, setCaptchaToken] = useState("");
+    const turnstileRef = useRef(null);
+
     const [mode, setMode] = useState("login");
 
-  const submit = async () => {
+    const submit = async () => {
         setErr(""); setMsg("");
 
         if (!email) { setErr("Email is required."); return; }
         if (!pass) { setErr("Password is required."); return; }
+        // 🌟 3. REQUIRE CAPTCHA BEFORE SUBMITTING
+        if (!captchaToken) { setErr("Please complete the CAPTCHA to verify you are human."); return; }
 
         setLoading(true);
         try {
             if (mode === "login") {
+                // 🌟 4. PASS THE CAPTCHA TOKEN TO SUPABASE
                 const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
                     email: email,
-                    password: pass
+                    password: pass,
+                    options: {
+                        captchaToken: captchaToken 
+                    }
                 });
 
                 if (authErr) throw authErr;
@@ -47,7 +59,7 @@ export default function Login({ onLogin, onOpenKiosk }) {
                 const profiles = await db.select("user_profiles", { filter: `id=eq.${user.id}` }, token);
                 const userProfile = profiles[0] || { full_name: email, role: "cashier" };
                 
-                // 🌟 THE CONDITIONAL KILL SWITCH
+                // THE CONDITIONAL KILL SWITCH
                 if (userProfile.role !== "superadmin") {
                     await supabase.auth.signOut({ scope: 'others' });
                     console.log("Standard profile: Other devices disconnected.");
@@ -59,6 +71,12 @@ export default function Login({ onLogin, onOpenKiosk }) {
             let errMsg = e.message;
             if (errMsg.toLowerCase().includes("user already registered")) errMsg = "An account with this Email Address already exists.";
             setErr(errMsg);
+            
+            // 🌟 5. RESET TURNSTILE ON FAILED LOGIN SO THEY CAN TRY AGAIN
+            if (turnstileRef.current) {
+                turnstileRef.current.reset();
+            }
+            setCaptchaToken("");
         }
         setLoading(false);
     };
@@ -86,7 +104,6 @@ export default function Login({ onLogin, onOpenKiosk }) {
             const profiles = await db.select("user_profiles", { filter: `id=eq.${user.id}` }, token);
             const userProfile = profiles[0] || { full_name: email, role: "cashier" };
 
-            // 🌟 THE CONDITIONAL KILL SWITCH (After successful MFA)
             if (userProfile.role !== "superadmin") {
                 await supabase.auth.signOut({ scope: 'others' });
                 console.log("Standard profile: Other devices disconnected after MFA.");
@@ -129,6 +146,19 @@ export default function Login({ onLogin, onOpenKiosk }) {
                         </div>
                     )}
 
+                    {/* 🌟 6. DISPLAY THE TURNSTILE WIDGET */}
+                    {mode === "login" && (
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px' }}>
+                            <Turnstile
+                                ref={turnstileRef}
+                                siteKey="0x4AAAAAAENwfJX9RzFQTBg3" 
+                                onSuccess={(token) => setCaptchaToken(token)}
+                                onError={() => setErr("Captcha verification failed. Please try again.")}
+                                onExpire={() => setCaptchaToken("")}
+                            />
+                        </div>
+                    )}
+
                     {/* The MFA Input Screen */}
                     {mode === "mfa" && (
                         <div className="form-group" style={{ textAlign: "center" }}>
@@ -157,22 +187,11 @@ export default function Login({ onLogin, onOpenKiosk }) {
                     )}
 
                     {mode === "login" && (
-                        <button className="btn btn-gold" style={{ marginTop: 4, width: "100%", justifyContent: "center", padding: "12px" }} onClick={submit} disabled={loading}>
+                        <button className="btn btn-gold" style={{ marginTop: 4, width: "100%", justifyContent: "center", padding: "12px" }} onClick={submit} disabled={loading || !captchaToken}>
                             {loading ? <><span className="spin" />&nbsp;Processing…</> : "Sign In →"}
                         </button>
                     )}
                 </div>
-
-                {/* KIOSK BUTTON FOR PUBLIC */}
-                {/* <div style={{ marginTop: "24px", borderTop: "1px solid var(--border)", paddingTop: "16px", textAlign: "center" }}>
-                    <p style={{ color: "var(--text3)", fontSize: "12px", marginBottom: "8px" }}>For Public Inquiries</p>
-                    <button
-                        onClick={onOpenKiosk}
-                        style={{ padding: "8px 16px", background: "transparent", border: "2px solid var(--blue)", color: "var(--blue)", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "12px" }}
-                    >
-                        🖥️ Open Self-Service Kiosk
-                    </button>
-                </div> */}
 
             </div>
         </div>
