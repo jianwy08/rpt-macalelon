@@ -164,7 +164,7 @@ export default function Delinquency({ token, profile }) {
         if (!form.property_id) { 
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setAsmtHistory([]); 
-            // eslint-disable-next-line react-hooks/set-state-in-effect
+            
             setPaidCollections([]); 
             return; 
         }
