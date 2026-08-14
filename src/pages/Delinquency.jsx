@@ -843,7 +843,7 @@ export default function Delinquency({ token, profile }) {
                                                         </td>
                                                     )}
                                                     <td style={{ border: "1px solid #000", padding: "6px" }}>
-                                                        {row.yearLabel || (row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`)}
+                                                        {row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`} <span style={{ fontWeight: "bold" }}>{row.customLabel}</span>
                                                     </td>
                                                     <td style={{ border: "1px solid #000", padding: "6px", textAlign: "right" }}>{fmt(row.av)}</td>
                                                     <td style={{ border: "1px solid #000", padding: "6px" }}>{row.count}</td>
@@ -1001,7 +1001,7 @@ export default function Delinquency({ token, profile }) {
                                                             </td>
                                                         )}
                                                         <td style={{ border: "1px solid #000", padding: "6px" }}>
-                                                            {row.yearLabel || (row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`)}
+                                                            {row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`} <span style={{ fontWeight: "bold" }}>{row.customLabel}</span>
                                                         </td>
                                                         <td style={{ border: "1px solid #000", padding: "6px", textAlign: "right" }}>{fmt(row.av)}</td>
                                                         <td style={{ border: "1px solid #000", padding: "6px" }}>{row.count}</td>
