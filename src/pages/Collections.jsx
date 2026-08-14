@@ -376,6 +376,10 @@ export default function Collection({ token, profile }) {
         try {
             const mainOr = orNumber.trim();
 
+            // 🌟 THE FIX: Get the exact ID of the Accountable Officer selected in the dropdown!
+            const assignedCashier = cashierList.find(c => (c.full_name || "").toUpperCase() === selectedCashier);
+            const finalCashierId = assignedCashier ? assignedCashier.id : (profile?.id || null);
+
             const rowsToInsert = dbCart.map((item) => ({
                 or_number: mainOr,
                 taxpayer_id: found.id,
@@ -392,7 +396,8 @@ export default function Collection({ token, profile }) {
                 penalty: item.pen || 0,
                 discount: item.disc || 0,
                 total_paid: item.total || 0,
-                cashier_id: profile?.id || null,
+                // 🌟 FIXED: Now uses the dropdown selection instead of the encoder!
+                cashier_id: finalCashierId, 
                 check_no: checkNo || null,
                 paid_by: paidBy ? paidBy.toUpperCase() : "UNKNOWN",
                 remarks: allowPartial ? partialRemarks : null 
@@ -421,12 +426,12 @@ export default function Collection({ token, profile }) {
 
             const allQTags = Array.from(new Set(dbCart.map(c => c.quarterTag))).join(", ");
 
-            setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, quarter_str: allQTags, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer: found, properties: selectedProps, cashier: profile?.full_name, cart: dbCart, remarks: allowPartial ? partialRemarks : "" });
+            // 🌟 FIXED: Update the printed receipt to show the assigned cashier's name too
+            setIssued({ ...col, payment_date: paymentDate, or_number: mainOr, paid_by: paidBy.toUpperCase(), tax_year: `${start}-${end}`, quarter_str: allQTags, basic_tax: tBasic, sef_tax: tSef, penalty: tPen, discount: tDisc, total_paid: gTotal, taxpayer: found, properties: selectedProps, cashier: assignedCashier ? assignedCashier.full_name : profile?.full_name, cart: dbCart, remarks: allowPartial ? partialRemarks : "" });
             setStep(4);
         } catch (e) { setErr(e.message); }
         setPosting(false);
     };
-
     const reset = () => { setStep(1); setFound(null); setPropList([]); setSelectedProps([]); setIssued(null); setQ(""); setErr(""); setOrNumber(""); setMultiPropData([]); setAllowPartial(false); setPartialRemarks(""); setOverrides({}); };
 
     if (step === 4 && issued) return (
