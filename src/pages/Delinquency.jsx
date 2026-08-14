@@ -831,11 +831,19 @@ export default function Delinquency({ token, profile }) {
                                         <tbody>
                                             {soaData.displayRows.map((row, idx) => (
                                                 <tr key={idx}>
-                                                    <td style={{ border: "1px solid #000", padding: "6px" }}>{soaData.property.property_index_no || "—"}</td>
-                                                    <td style={{ border: "1px solid #000", padding: "6px" }}>{soaData.property.barangay || "—"}</td>
-                                                    {/* 🌟 FIXED: RESTORES "2003 - 2019" GROUP LABEL! */}
+                                                    {/* 🌟 ONLY RENDER PIN AND BRGY ON THE FIRST ROW, SPANNING DOWNWARD */}
+                                                    {idx === 0 && (
+                                                        <td rowSpan={soaData.displayRows.length} style={{ border: "1px solid #000", padding: "6px", verticalAlign: "middle" }}>
+                                                            {soaData.property.property_index_no || "—"}
+                                                        </td>
+                                                    )}
+                                                    {idx === 0 && (
+                                                        <td rowSpan={soaData.displayRows.length} style={{ border: "1px solid #000", padding: "6px", verticalAlign: "middle" }}>
+                                                            {soaData.property.barangay || "—"}
+                                                        </td>
+                                                    )}
                                                     <td style={{ border: "1px solid #000", padding: "6px" }}>
-                                                        {row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`} {row.customLabel}
+                                                        {row.yearLabel || (row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`)}
                                                     </td>
                                                     <td style={{ border: "1px solid #000", padding: "6px", textAlign: "right" }}>{fmt(row.av)}</td>
                                                     <td style={{ border: "1px solid #000", padding: "6px" }}>{row.count}</td>
@@ -981,11 +989,19 @@ export default function Delinquency({ token, profile }) {
                                             <tbody>
                                                 {data.displayRows.map((row, idx) => (
                                                     <tr key={idx}>
-                                                        <td style={{ border: "1px solid #000", padding: "6px" }}>{data.property.property_index_no || "—"}</td>
-                                                        <td style={{ border: "1px solid #000", padding: "6px" }}>{data.property.barangay || "—"}</td>
-                                                        {/* 🌟 FIXED: RESTORES "2003 - 2019" GROUP LABEL! */}
+                                                        {/* 🌟 ONLY RENDER PIN AND BRGY ON THE FIRST ROW, SPANNING DOWNWARD */}
+                                                        {idx === 0 && (
+                                                            <td rowSpan={data.displayRows.length} style={{ border: "1px solid #000", padding: "6px", verticalAlign: "middle" }}>
+                                                                {data.property.property_index_no || "—"}
+                                                            </td>
+                                                        )}
+                                                        {idx === 0 && (
+                                                            <td rowSpan={data.displayRows.length} style={{ border: "1px solid #000", padding: "6px", verticalAlign: "middle" }}>
+                                                                {data.property.barangay || "—"}
+                                                            </td>
+                                                        )}
                                                         <td style={{ border: "1px solid #000", padding: "6px" }}>
-                                                            {row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`} {row.customLabel}
+                                                            {row.yearLabel || (row.startYear === row.endYear ? row.startYear : `${row.startYear} - ${row.endYear}`)}
                                                         </td>
                                                         <td style={{ border: "1px solid #000", padding: "6px", textAlign: "right" }}>{fmt(row.av)}</td>
                                                         <td style={{ border: "1px solid #000", padding: "6px" }}>{row.count}</td>
