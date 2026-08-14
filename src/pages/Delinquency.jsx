@@ -362,22 +362,46 @@ export default function Delinquency({ token, profile }) {
     // 🌟 FORMAT SOA ROWS (SAVED RECORDS)
     const formatSOARows = (details, targetMonth) => {
         const currentYear = new Date().getFullYear();
-        const sortedDetails = details.sort((a, b) => parseInt(a.tax_year) - parseInt(b.tax_year));
+        
+        // 🌟 THE FIX: Combine all fragmented DB records into ONE full year BEFORE calculating
+        const yearMap = {};
+        details.forEach(d => {
+            const y = parseInt(d.tax_year);
+            if (!yearMap[y]) {
+                yearMap[y] = { 
+                    year: y,
+                    unpaid_basic: 0,
+                    unpaid_sef: 0,
+                    interest_amount: 0,
+                    total_due: 0,
+                    isSavedShortTax: parseInt(d.months_delinquent) === -1
+                };
+            }
+            yearMap[y].unpaid_basic += parseFloat(d.unpaid_basic) || 0;
+            yearMap[y].unpaid_sef += parseFloat(d.unpaid_sef) || 0;
+            yearMap[y].interest_amount += parseFloat(d.interest_amount) || 0;
+            yearMap[y].total_due += parseFloat(d.total_due) || 0;
+            if (parseInt(d.months_delinquent) === -1) yearMap[y].isSavedShortTax = true;
+        });
+
+        // Now we loop through our perfectly combined years
+        const sortedYears = Object.values(yearMap).sort((a, b) => a.year - b.year);
         let tAv = 0;
         let detailedRows = [];
 
-        sortedDetails.forEach(d => {
-            const y = parseInt(d.tax_year);
-            const basic = parseFloat(d.unpaid_basic) || 0;
-            const sef = parseFloat(d.unpaid_sef) || 0;
-            const av = basic / 0.01;
+        sortedYears.forEach(d => {
+            const y = d.year;
+            const basic = rd(d.unpaid_basic);
+            const sef = rd(d.unpaid_sef);
+            
+            // 🌟 Because the basics are combined, this will correctly equal 1,561,000
+            const av = rd(basic / 0.01); 
             tAv += av;
 
-            let penalty = parseFloat(d.interest_amount) || 0;
-            let total = parseFloat(d.total_due) || 0;
-            const isSavedShortTax = parseInt(d.months_delinquent) === -1;
+            let penalty = rd(d.interest_amount);
+            let total = rd(d.total_due);
 
-            if (isSavedShortTax) {
+            if (d.isSavedShortTax) {
                 detailedRows.push({ year: y, customLabel: "(SHORT TAX)", av, penalty_percent: "SHORT TAX", basic, sef, penalty: 0, discount: 0, total: rd(basic + sef), is_quarter_split: false });
             } else if (waivePenalties) {
                 detailedRows.push({ year: y, customLabel: "", av, penalty_percent: "WAIVED", basic, sef, penalty: 0, discount: 0, total: rd(basic + sef), is_quarter_split: false });
@@ -387,8 +411,17 @@ export default function Delinquency({ token, profile }) {
                 [1, 2, 3, 4].forEach(q => { if (targetMonth > qDeadlines[q - 1]) lateCount++; });
 
                 if (lateCount > 0 && lateCount < 4) {
-                    const lateBasic = rd(basic * (lateCount / 4)); const lateSef = rd(sef * (lateCount / 4)); const latePen = penalty;
-                    const promptBasic = rd(basic - lateBasic); const promptSef = rd(sef - lateSef); const promptDisc = rd((promptBasic + promptSef) * 0.10);
+                    const lateBasic = rd(basic * (lateCount / 4));
+                    const lateSef = rd(sef * (lateCount / 4));
+                    
+                    // Recalculate exact penalty to ensure perfect balance
+                    const currRate = Math.min(targetMonth * 0.02, 0.72);
+                    const latePen = rd((lateBasic + lateSef) * currRate);
+
+                    const promptBasic = rd(basic - lateBasic);
+                    const promptSef = rd(sef - lateSef);
+                    const promptDisc = rd((promptBasic + promptSef) * 0.10);
+
                     detailedRows.push({ year: y, customLabel: `(Q1-Q${lateCount})`, av, penalty_percent: `${(targetMonth * 2)}%`, basic: lateBasic, sef: lateSef, penalty: latePen, discount: 0, total: rd(lateBasic + lateSef + latePen), is_quarter_split: true });
                     detailedRows.push({ year: y, customLabel: `(Q${lateCount+1}-Q4)`, av, penalty_percent: "10% DISC", basic: promptBasic, sef: promptSef, penalty: 0, discount: promptDisc, total: rd(promptBasic + promptSef - promptDisc), is_quarter_split: true });
                 } else if (lateCount === 4) {
