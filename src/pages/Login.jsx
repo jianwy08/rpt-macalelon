@@ -3,7 +3,7 @@ import { db, supabase } from "../utils/db";
 // 🌟 1. IMPORT TURNSTILE
 import { Turnstile } from '@marsidev/react-turnstile';
 
-export default function Login({ onLogin, onOpenKiosk }) {
+export default function Login({ onLogin}) {
     const [email, setEmail] = useState("");
     const [pass, setPass] = useState("");
     const [loading, setLoading] = useState(false);
