@@ -1,39 +1,45 @@
 import { useEffect, useRef } from "react";
-// Import your Supabase instance here (adjust the path if necessary)
+// Uses your app's actual database instance
 import { db } from "../utils/db"; 
 
 export default function AutoLogout({ timeoutMinutes = 15 }) {
-    const timeoutRef = useRef(null);
+  const timeoutRef = useRef(null);
 
-    useEffect(() => {
-        // 🌟 Moved inside the useEffect to satisfy ESLint
-        const logoutUser = async () => {
-            alert("Your session has expired due to inactivity. You have been automatically logged out for security.");
-            await db.auth.signOut(); 
-            localStorage.clear();
-            window.location.href = "/login"; 
-        };
+  useEffect(() => {
+    const logoutUser = async () => {
+      try {
+        // Attempt backend logout first
+        await db.auth.signOut();
+      } catch (error) {
+        console.error("Backend logout error (safe to ignore):", error);
+      } finally {
+        // Clear all stored credentials
+        localStorage.clear();
+        sessionStorage.clear();
 
-        // 🌟 Moved inside the useEffect to satisfy ESLint
-        const resetTimer = () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            timeoutRef.current = setTimeout(logoutUser, timeoutMinutes * 60 * 1000);
-        };
+        alert("Your session has expired due to inactivity. You have been automatically logged out for security.");
+        window.location.href = "/login";
+      }
+    };
 
-        const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    const resetTimer = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(logoutUser, timeoutMinutes * 60 * 1000);
+    };
 
-        // Attach the event listeners
-        events.forEach((event) => window.addEventListener(event, resetTimer));
-        
-        // Start the initial countdown
-        resetTimer();
+    const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
 
-        // Cleanup function when the component unmounts
-        return () => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            events.forEach((event) => window.removeEventListener(event, resetTimer));
-        };
-    }, [timeoutMinutes]); // 🌟 ESLint is now perfectly happy!
+    // Attach activity listeners
+    events.forEach((event) => window.addEventListener(event, resetTimer));
 
-    return null; 
+    // Start initial timer
+    resetTimer();
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [timeoutMinutes]);
+
+  return null;
 }
