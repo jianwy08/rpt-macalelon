@@ -283,7 +283,14 @@ export default function Collection({ token, profile }) {
 
                 let totalDueRow = rowBasic + rowSef;
                 if (y > currentYear) {
-                    rawDisc = totalDueRow * (currentMonth <= 9 ? 0.15 : 0.10);
+                    if (y >= currentYear + 2) {
+                        // Next-next year or beyond: 20% if before/on Sept 30, else 10%
+                        rawDisc = totalDueRow * (currentMonth <= 9 ? 0.20 : 0.10);
+                    } else {
+                        // Next year (y === currentYear + 1): 15% if before/on Sept 30, else 10%
+                        rawDisc = totalDueRow * (currentMonth <= 9 ? 0.15 : 0.10);
+                    }
+                
                 } else if (y < currentYear) {
                     const mosLate = ((currentYear - y) * 12) + currentMonth;
                     let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
@@ -317,9 +324,15 @@ export default function Collection({ token, profile }) {
                     rowBasic += getQBasic(q); 
                     rowSef += getQSef(q);
                     if (y > currentYear) {
-                        if (currentMonth <= 9) rawDisc += getQDue(q) * 0.15;
-                        else rawDisc += getQDue(q) * 0.10;
-                    } else if (y < currentYear) {
+                        if (y >= currentYear + 2) {
+                            // Next-next year or beyond: 20% if before/on Sept 30, else 10%
+                            rawDisc += getQDue(q) * (currentMonth <= 9 ? 0.20 : 0.10);
+                        } else {
+                            // Next year: 15% if before/on Sept 30, else 10%
+                            rawDisc += getQDue(q) * (currentMonth <= 9 ? 0.15 : 0.10);
+                        }
+                    }
+                     else if (y < currentYear) {
                         const mosLate = ((currentYear - y) * 12) + currentMonth;
                         let penaltyRate = (y <= 1991) ? Math.min(mosLate * 0.02, 0.24) : Math.min(mosLate * 0.02, 0.72);
                         rawPen += getQDue(q) * penaltyRate;
