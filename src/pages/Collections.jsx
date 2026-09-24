@@ -263,8 +263,20 @@ export default function Collection({ token, profile }) {
             const paidBasic = mp.paidAmounts?.[y]?.basic || 0;
             const paidSef = mp.paidAmounts?.[y]?.sef || 0;
 
-            const remainingBasic = rd(fullBasic - paidBasic);
-            const remainingSef = rd(fullSef - paidSef);
+            // 🌟 FIXED: Changed to 'let' so we can override it if a future payment exists
+            let remainingBasic = rd(fullBasic - paidBasic);
+            let remainingSef = rd(fullSef - paidSef);
+
+            // 🌟 NEW LOGIC: Check if any year AFTER 'y' has a payment
+            const hasFuturePayment = Object.keys(mp.paidAmounts || {}).some(
+                paidYear => parseInt(paidYear) > y && (mp.paidAmounts[paidYear].basic > 0 || mp.paidAmounts[paidYear].sef > 0)
+            );
+
+            // If a future year is paid, assume this older year is legally settled
+            if (hasFuturePayment) {
+                remainingBasic = 0;
+                remainingSef = 0;
+            }
 
             if (remainingBasic <= 0 && remainingSef <= 0 && !allowPartial) continue;
             
