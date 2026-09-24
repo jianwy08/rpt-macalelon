@@ -485,6 +485,7 @@ export default function Taxpayers({ token, profile }) {
                                     <option>Agricultural</option>
                                     <option>Commercial</option>
                                     <option>Industrial</option>
+                                    <option>Machineries</option>
                                 </select>
                             </div>
                             <div className="form-group">
