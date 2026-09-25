@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { db } from "../utils/db";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, CartesianGrid, Bar, XAxis, YAxis } from "recharts";
 import RCDForm from "../components/RCDForm";
+import RpuPaymentByClassification from "../components/RpuPaymentByClassification";
 
 export default function Reports({ token, profile }) {
   const getToday = () => {
@@ -53,6 +54,12 @@ export default function Reports({ token, profile }) {
     const loadData = async () => {
       setLoading(true);
       try {
+        // 🌟 NEW: Bypass fetching for the new Classification tab since it fetches its own data
+        if (tab === "rpu_class") {
+            if (isMounted) setLoading(false);
+            return;
+        }
+
         if (tab === "analytics") {
           const p = await db.select("properties", { select: "barangay, classification", limit: 50000 }, token);
           const safeP = Array.isArray(p) ? p : [];
@@ -152,7 +159,7 @@ export default function Reports({ token, profile }) {
     loadData();
 
     return () => { isMounted = false; };
-  }, [tab, date, token, profile]);
+  }, [tab, date, token, profile, selectedRcdCashier]);
 
   const handleDelete = async (item, type) => {
     if (!window.confirm(`Permanently delete this ${type} record?`)) return;
@@ -377,7 +384,7 @@ export default function Reports({ token, profile }) {
         </div>
         <div className="topbar-right">
           {tab === "provincial" && <button className="btn btn-primary" onClick={() => window.print()}>🖨️ Print Report</button>}
-          {(tab !== "analytics" && tab !== "provincial" && tab !== "rcd") && <input type="date" value={date} onChange={e => setDate(String(e.target.value))} style={{ width: 168 }} />}
+          {(!["analytics", "provincial", "rcd", "rpu_class"].includes(tab)) && <input type="date" value={date} onChange={e => setDate(String(e.target.value))} style={{ width: 168 }} />}
         </div>
       </div>
 
@@ -411,13 +418,19 @@ export default function Reports({ token, profile }) {
             ["provincial", "🏢 Provincial Query"], 
             ["delinq", "Delinquency Aging"], 
             ["analytics", "📊 Analytics (RPUs)"], 
-            ["rcd", "📜 COA RCD"]
+            ["rcd", "📜 COA RCD"],
+            ["rpu_class", "🏷️ Paid By Class"] // 🌟 NEW TAB ADDED HERE
           ].map(([id, label]) => (
             <button key={id} className={`tab-btn ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>{label}</button>
           ))}
         </div>
 
         {loading ? <div className="loading-state"><span className="spin" />Loading data…</div> : <>
+
+          {/* 🌟 THE NEW RPU BY CLASSIFICATION COMPONENT TAB */}
+          {tab === "rpu_class" && (
+            <RpuPaymentByClassification token={token} />
+          )}
 
           {tab === "analytics" && (
             <>
